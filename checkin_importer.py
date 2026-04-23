@@ -111,11 +111,15 @@ class CheckinImporter:
 
         attendance = self._build_attendance_groups(raw_events)
         raw_events = raw_events.merge(
-            attendance[["attendance_uid", "import_batch_id", "group_no", "employee_id", "work_date", "department"]],
+            attendance[["attendance_uid", "attendance_key", "import_batch_id", "group_no", "employee_id", "work_date", "department"]],
             on=["import_batch_id", "group_no", "employee_id", "work_date", "department"],
             how="left",
         )
-        ordered_columns = ["attendance_uid", *[column for column in raw_events.columns if column != "attendance_uid"]]
+        ordered_columns = [
+            "attendance_uid",
+            "attendance_key",
+            *[column for column in raw_events.columns if column not in {"attendance_uid", "attendance_key"}],
+        ]
         raw_events = raw_events[ordered_columns].copy()
         return raw_events, attendance
 
@@ -147,6 +151,10 @@ class CheckinImporter:
             lambda row: f"{row['employee_id']}_{row['work_date']}_{row['group_no']}_{row['import_batch_id']}",
             axis=1,
         )
+        grouped["attendance_key"] = grouped.apply(
+            lambda row: f"{row['employee_id']}_{row['work_date']}_{row['group_no']}",
+            axis=1,
+        )
         grouped["source_quality_status"] = grouped.apply(
             lambda row: self._quality_status(
                 gps_event_count=row["gps_event_count"],
@@ -160,6 +168,7 @@ class CheckinImporter:
         return grouped[
             [
                 "attendance_uid",
+                "attendance_key",
                 "import_batch_id",
                 "group_no",
                 "employee_id",

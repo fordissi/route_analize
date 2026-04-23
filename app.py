@@ -310,6 +310,11 @@ def build_google_routes_diagnostics(
     if attendance_slice.empty:
         return pd.DataFrame()
 
+    attendance_meta = attendance_slice[
+        ["attendance_uid", "attendance_key", "employee_id", "employee_label", "work_date"]
+    ].drop_duplicates().copy()
+    attendance_meta["work_date"] = pd.to_datetime(attendance_meta["work_date"], errors="coerce").dt.strftime("%Y-%m-%d")
+
     expected_segments = build_attendance_segments(
         attendance_slice=attendance_slice,
         raw_events=raw_events,
@@ -317,13 +322,10 @@ def build_google_routes_diagnostics(
         route_mode=route_mode,
         coord_precision=coord_precision,
     )
-    attendance_meta = attendance_slice[["attendance_uid", "employee_id", "employee_label", "work_date"]].drop_duplicates().copy()
-    attendance_meta["work_date"] = pd.to_datetime(attendance_meta["work_date"], errors="coerce").dt.strftime("%Y-%m-%d")
 
     if not expected_segments:
         diagnostics = attendance_meta.copy()
         diagnostics["expected_segments"] = 0
-        diagnostics["cache_rows"] = 0
         diagnostics["api_success_segments"] = 0
         diagnostics["cache_hit_segments"] = 0
         diagnostics["failed_segments"] = 0
@@ -335,6 +337,7 @@ def build_google_routes_diagnostics(
             [
                 {
                     "attendance_uid": segment.attendance_uid,
+                    "attendance_key": segment.attendance_key,
                     "segment_no": segment.segment_no,
                     "segment_type": segment.segment_type,
                 }
@@ -344,25 +347,27 @@ def build_google_routes_diagnostics(
 
         cache_detail = google_route_cache_detail.copy() if isinstance(google_route_cache_detail, pd.DataFrame) else pd.DataFrame()
         if not cache_detail.empty:
+            if "attendance_key" not in cache_detail.columns:
+                cache_detail["attendance_key"] = cache_detail["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
             cache_detail = cache_detail.loc[
-                cache_detail["attendance_uid"].isin(expected_df["attendance_uid"])
+                cache_detail["attendance_key"].isin(expected_df["attendance_key"])
             ].copy()
             cache_detail["calculated_at"] = pd.to_datetime(cache_detail["calculated_at"], errors="coerce")
-            cache_detail = cache_detail.sort_values(["attendance_uid", "segment_no", "segment_type", "calculated_at"])
+            cache_detail = cache_detail.sort_values(["attendance_key", "segment_no", "segment_type", "calculated_at"])
             cache_detail = cache_detail.drop_duplicates(
-                subset=["attendance_uid", "segment_no", "segment_type"],
+                subset=["attendance_key", "segment_no", "segment_type"],
                 keep="last",
             )
         else:
             cache_detail = pd.DataFrame(
-                columns=["attendance_uid", "segment_no", "segment_type", "polyline", "status", "error_message", "calculated_at"]
+                columns=["attendance_key", "segment_no", "segment_type", "polyline", "status", "error_message", "calculated_at"]
             )
 
         merged = expected_df.merge(
             cache_detail[
-                ["attendance_uid", "segment_no", "segment_type", "polyline", "status", "error_message", "calculated_at"]
+                ["attendance_key", "segment_no", "segment_type", "polyline", "status", "error_message", "calculated_at"]
             ],
-            on=["attendance_uid", "segment_no", "segment_type"],
+            on=["attendance_key", "segment_no", "segment_type"],
             how="left",
         )
         merged["has_polyline"] = merged["polyline"].astype("string").fillna("").str.len() > 0
@@ -372,7 +377,7 @@ def build_google_routes_diagnostics(
         merged["is_missing_polyline"] = merged["is_ok"] & ~merged["has_polyline"]
 
         aggregated = (
-            merged.groupby("attendance_uid", dropna=False)
+            merged.groupby("attendance_key", dropna=False)
             .agg(
                 expected_segments=("segment_no", "count"),
                 cache_rows=("status", lambda values: int(values.notna().sum())),
@@ -386,16 +391,18 @@ def build_google_routes_diagnostics(
 
         summary_slice = google_route_summary.copy() if isinstance(google_route_summary, pd.DataFrame) else pd.DataFrame()
         if not summary_slice.empty:
+            if "attendance_key" not in summary_slice.columns:
+                summary_slice["attendance_key"] = summary_slice["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
             summary_slice = summary_slice.loc[
-                summary_slice["attendance_uid"].isin(expected_df["attendance_uid"])
-            ][["attendance_uid", "cached_segment_count", "api_segment_count", "segment_count"]].copy()
+                summary_slice["attendance_key"].isin(expected_df["attendance_key"])
+            ][["attendance_key", "cached_segment_count", "api_segment_count", "segment_count"]].copy()
+            summary_slice = summary_slice.sort_values(["attendance_key"]).drop_duplicates(["attendance_key"], keep="last")
         else:
-            summary_slice = pd.DataFrame(columns=["attendance_uid", "cached_segment_count", "api_segment_count", "segment_count"])
+            summary_slice = pd.DataFrame(columns=["attendance_key", "cached_segment_count", "api_segment_count", "segment_count"])
 
-        diagnostics = attendance_meta.merge(aggregated, on="attendance_uid", how="left").merge(summary_slice, on="attendance_uid", how="left")
+        diagnostics = attendance_meta.merge(aggregated, on="attendance_key", how="left").merge(summary_slice, on="attendance_key", how="left")
         for column in [
             "expected_segments",
-            "cache_rows",
             "failed_segments",
             "missing_polyline_segments",
             "usable_polyline_segments",
@@ -410,7 +417,11 @@ def build_google_routes_diagnostics(
             )
 
         diagnostics["api_success_segments"] = diagnostics["api_segment_count"]
-        diagnostics["cache_hit_segments"] = diagnostics["cached_segment_count"]
+        diagnostics["cache_hit_segments"] = np.where(
+            diagnostics["cached_segment_count"] > 0,
+            diagnostics["cached_segment_count"],
+            diagnostics["usable_polyline_segments"],
+        )
 
         def classify(row: pd.Series) -> str:
             if row["failed_segments"] > 0:
@@ -423,7 +434,7 @@ def build_google_routes_diagnostics(
                 return "API 成功"
             if row["cache_hit_segments"] == row["expected_segments"] and row["expected_segments"] > 0:
                 return "只命中快取"
-            if row["cache_rows"] == 0:
+            if row["expected_segments"] > 0 and row["api_success_segments"] == 0 and row["cache_hit_segments"] == 0 and row["failed_segments"] == 0:
                 return "尚未執行"
             return "部分完成"
 
@@ -450,6 +461,7 @@ def build_google_routes_diagnostics(
             "員工編號",
             "員工",
             "attendance_uid",
+            "attendance_key",
             "診斷結果",
             "預期路段數",
             "API 成功段數",
@@ -658,8 +670,9 @@ def load_results():
     daily_metrics["work_date"] = pd.to_datetime(daily_metrics["work_date"], errors="coerce")
     for column in ["actual_time", "scheduled_time"]:
         raw_events[column] = pd.to_datetime(raw_events[column], errors="coerce")
-    attendance_key = attendance[["attendance_uid", "employee_id", "work_date", "group_no"]].copy()
-    raw_events = raw_events.merge(attendance_key, on=["employee_id", "work_date", "group_no"], how="left")
+    if "attendance_uid" not in raw_events.columns:
+        attendance_key = attendance[["attendance_uid", "employee_id", "work_date", "group_no"]].copy()
+        raw_events = raw_events.merge(attendance_key, on=["employee_id", "work_date", "group_no"], how="left")
 
     employee_names = (
         raw_events[["employee_id", "employee_name", "department"]]
@@ -681,14 +694,20 @@ def load_results():
     daily_metrics = daily_metrics.merge(employee_names[["employee_id", "employee_name", "employee_label"]], on="employee_id", how="left")
     routes = routes.merge(attendance[["attendance_uid", "employee_id", "employee_name", "employee_label", "work_date"]], on="attendance_uid", how="left")
     finance = finance.merge(attendance[["attendance_uid", "employee_id", "employee_name", "employee_label", "work_date"]], on="attendance_uid", how="left")
+    if "attendance_key" not in routes.columns:
+        routes = routes.merge(attendance[["attendance_uid", "attendance_key"]], on="attendance_uid", how="left")
+    if "attendance_key" not in finance.columns:
+        finance = finance.merge(attendance[["attendance_uid", "attendance_key"]], on="attendance_uid", how="left")
     google_route_summary = load_google_route_summary(config.sqlite_path)
     google_route_cache = load_google_route_cache(config.sqlite_path)
     google_route_cache_detail = load_google_route_cache_detail(config.sqlite_path)
     if not google_route_summary.empty:
+        if "attendance_key" not in google_route_summary.columns:
+            google_route_summary["attendance_key"] = google_route_summary["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
         routes = routes.merge(
             google_route_summary[
                 [
-                    "attendance_uid",
+                    "attendance_key",
                     "route_mode",
                     "estimated_total_km",
                     "estimated_business_km",
@@ -710,7 +729,7 @@ def load_results():
                     "route_notes": "google_route_notes",
                 }
             ),
-            on="attendance_uid",
+            on="attendance_key",
             how="left",
         )
         for base_col, google_col in [
@@ -1388,11 +1407,15 @@ with tab_daily:
     ].copy()
     day_route = routes.loc[routes["attendance_uid"].isin(day_attendance["attendance_uid"])].copy()
     day_finance = finance.loc[finance["attendance_uid"].isin(day_attendance["attendance_uid"])].copy()
-    day_google_segments = (
-        google_route_cache.loc[google_route_cache["attendance_uid"].isin(day_attendance["attendance_uid"])].copy()
-        if isinstance(google_route_cache, pd.DataFrame) and not google_route_cache.empty
-        else pd.DataFrame()
-    )
+    if isinstance(google_route_cache, pd.DataFrame) and not google_route_cache.empty:
+        cache_lookup = google_route_cache.copy()
+        if "attendance_key" not in cache_lookup.columns:
+            cache_lookup["attendance_key"] = cache_lookup["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
+        day_google_segments = cache_lookup.loc[
+            cache_lookup["attendance_key"].isin(day_attendance["attendance_key"])
+        ].copy()
+    else:
+        day_google_segments = pd.DataFrame()
     filter_col3.markdown(
         f"""
         <div class="section-card" style="padding:0.85rem 1rem;">
@@ -1832,6 +1855,11 @@ with tab_routes_api:
         help="座標會先四捨五入到指定小數位後再組 cache key，用來容忍 GPS 小幅漂移。",
     )
     st.caption("小數位對應的約略距離：2 位約 1 公里、3 位約 100 公尺、4 位約 10 公尺、5 位約 1 公尺、6 位約 0.1 公尺。")
+    if coord_precision < 4:
+        st.warning(
+            f"目前選擇的是第 {coord_precision} 位小數，這種粒度較容易讓不同路段共用同一個快取鍵。"
+            "雖然有機會節省 API 使用量，但也比較可能出現部分路段共用快取、地圖顯示直線補線的情況。"
+        )
 
     attendance_slice = attendance.loc[attendance["work_date"].dt.date.between(route_api_start, route_api_end)].copy()
     estimator = estimate_monthly_usage(
@@ -1883,11 +1911,33 @@ with tab_routes_api:
                     api_key=route_api_key.strip(),
                     coord_precision=coord_precision,
                 )
+            st.session_state["last_google_routes_run"] = {
+                "start_date": str(route_api_start),
+                "end_date": str(route_api_end),
+                "coord_precision_selected": int(coord_precision),
+                "coord_precision_executed": int(coord_precision),
+                "segments": int(run_result["segments"]),
+                "api_calls": int(run_result["api_calls"]),
+                "cache_hits": int(run_result["cache_hits"]),
+                "failed_segments": int(run_result.get("failed_segments", 0)),
+            }
             st.success(
-                f"已完成 Google Routes 計算：總段數 {run_result['segments']}，新呼叫 API {run_result['api_calls']} 段，命中快取 {run_result['cache_hits']} 段。"
+                f"已完成 Google Routes 計算：總段數 {run_result['segments']}，新呼叫 API {run_result['api_calls']} 段，命中快取 {run_result['cache_hits']} 段，失敗 {run_result.get('failed_segments', 0)} 段。"
             )
             st.cache_data.clear()
             st.rerun()
+
+    last_google_routes_run = st.session_state.get("last_google_routes_run")
+    if last_google_routes_run and last_google_routes_run.get("start_date") == str(route_api_start) and last_google_routes_run.get("end_date") == str(route_api_end):
+        st.markdown("**本次執行摘要**")
+        run_cols = st.columns(4)
+        run_cols[0].metric("本次總段數", last_google_routes_run.get("segments", 0))
+        run_cols[1].metric("本次 API 新成功", last_google_routes_run.get("api_calls", 0))
+        run_cols[2].metric("本次快取命中", last_google_routes_run.get("cache_hits", 0))
+        run_cols[3].metric("本次失敗段數", last_google_routes_run.get("failed_segments", 0))
+        st.caption(
+            f"本次實際執行使用第 {last_google_routes_run.get('coord_precision_executed')} 位小數作為快取鍵粒度。"
+        )
 
     diagnostics_df = build_google_routes_diagnostics(
         attendance_slice=attendance_slice,

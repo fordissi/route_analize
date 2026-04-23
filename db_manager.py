@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS manual_override_log (
 CREATE TABLE IF NOT EXISTS google_route_cache (
     cache_key TEXT PRIMARY KEY,
     attendance_uid TEXT,
+    attendance_key TEXT,
     segment_no INTEGER,
     segment_type TEXT,
     origin_lat REAL,
@@ -187,6 +188,7 @@ CREATE TABLE IF NOT EXISTS google_route_cache (
 
 CREATE TABLE IF NOT EXISTS google_route_summary (
     attendance_uid TEXT PRIMARY KEY,
+    attendance_key TEXT,
     route_mode TEXT,
     segment_count INTEGER,
     cached_segment_count INTEGER,
@@ -218,9 +220,49 @@ class DatabaseManager:
     def initialize(self) -> None:
         with self.connect() as conn:
             conn.executescript(SCHEMA_SQL)
+            self._migrate_route_tables(conn)
 
     def replace_table(self, conn: sqlite3.Connection, table_name: str, dataframe) -> None:
         dataframe.to_sql(table_name, conn, if_exists="replace", index=False)
 
     def execute(self, conn: sqlite3.Connection, sql: str, params: tuple = ()) -> None:
         conn.execute(sql, params)
+
+    def _ensure_column(self, conn: sqlite3.Connection, table_name: str, column_name: str, column_sql: str) -> None:
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})")}
+        if column_name not in existing:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
+
+    def _derive_attendance_key(self, attendance_uid: str | None) -> str | None:
+        if not attendance_uid:
+            return None
+        parts = str(attendance_uid).split("_")
+        if len(parts) < 3:
+            return None
+        return "_".join(parts[:3])
+
+    def _migrate_route_tables(self, conn: sqlite3.Connection) -> None:
+        self._ensure_column(conn, "google_route_cache", "attendance_key", "TEXT")
+        self._ensure_column(conn, "google_route_summary", "attendance_key", "TEXT")
+
+        cache_rows = conn.execute(
+            "SELECT cache_key, attendance_uid, attendance_key FROM google_route_cache"
+        ).fetchall()
+        for cache_key, attendance_uid, attendance_key in cache_rows:
+            derived = attendance_key or self._derive_attendance_key(attendance_uid)
+            if derived and derived != attendance_key:
+                conn.execute(
+                    "UPDATE google_route_cache SET attendance_key = ? WHERE cache_key = ?",
+                    (derived, cache_key),
+                )
+
+        summary_rows = conn.execute(
+            "SELECT attendance_uid, attendance_key FROM google_route_summary"
+        ).fetchall()
+        for attendance_uid, attendance_key in summary_rows:
+            derived = attendance_key or self._derive_attendance_key(attendance_uid)
+            if derived and derived != attendance_key:
+                conn.execute(
+                    "UPDATE google_route_summary SET attendance_key = ? WHERE attendance_uid = ?",
+                    (derived, attendance_uid),
+                )

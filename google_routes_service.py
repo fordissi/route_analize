@@ -29,6 +29,19 @@ def _now_text() -> str:
     return datetime.now().strftime(NOW_FMT)
 
 
+def build_attendance_key(employee_id: Any, work_date: Any, group_no: Any) -> str:
+    return f"{employee_id}_{work_date}_{group_no}"
+
+
+def derive_attendance_key(attendance_uid: str | None) -> str | None:
+    if not attendance_uid:
+        return None
+    parts = str(attendance_uid).split("_")
+    if len(parts) < 3:
+        return None
+    return "_".join(parts[:3])
+
+
 def parse_duration_seconds(value: str | None) -> float:
     if not value:
         return 0.0
@@ -67,6 +80,7 @@ def build_cache_key(
 @dataclass(slots=True)
 class RouteSegment:
     attendance_uid: str
+    attendance_key: str
     segment_no: int
     segment_type: str
     origin_lat: float
@@ -117,12 +131,21 @@ def build_attendance_segments(
     route_mode: str,
     coord_precision: int | None = None,
 ) -> list[RouteSegment]:
+    work_events = raw_events.copy()
+    if "attendance_uid" not in work_events.columns or "attendance_key" not in work_events.columns:
+        attendance_key = attendance_slice[["attendance_uid", "attendance_key", "employee_id", "work_date", "group_no"]].copy()
+        work_events = work_events.merge(
+            attendance_key,
+            on=["employee_id", "work_date", "group_no"],
+            how="left",
+        )
     employee_lookup = employees.set_index("employee_id")
     segments: list[RouteSegment] = []
     precision = normalize_coord_precision(coord_precision)
     for _, attendance_row in attendance_slice.iterrows():
         attendance_uid = attendance_row["attendance_uid"]
-        event_slice = raw_events.loc[raw_events["attendance_uid"] == attendance_uid].dropna(subset=["gps_lat", "gps_lon"]).copy()
+        attendance_key = attendance_row["attendance_key"]
+        event_slice = work_events.loc[work_events["attendance_uid"] == attendance_uid].dropna(subset=["gps_lat", "gps_lon"]).copy()
         if event_slice.empty:
             continue
         event_slice = event_slice.sort_values(["actual_time", "source_row_no"])
@@ -143,6 +166,7 @@ def build_attendance_segments(
             segments.append(
                 RouteSegment(
                     attendance_uid=attendance_uid,
+                    attendance_key=attendance_key,
                     segment_no=segment_no,
                     segment_type="home_to_first",
                     origin_lat=home_lat,
@@ -158,6 +182,7 @@ def build_attendance_segments(
             segments.append(
                 RouteSegment(
                     attendance_uid=attendance_uid,
+                    attendance_key=attendance_key,
                     segment_no=segment_no,
                     segment_type="between_points",
                     origin_lat=first[0],
@@ -174,6 +199,7 @@ def build_attendance_segments(
             segments.append(
                 RouteSegment(
                     attendance_uid=attendance_uid,
+                    attendance_key=attendance_key,
                     segment_no=segment_no,
                     segment_type="last_to_home",
                     origin_lat=last_lat,
@@ -301,19 +327,38 @@ def compute_route_via_google(api_key: str, segment: RouteSegment) -> dict[str, A
     }
 
 
+def format_request_exception(exc: Exception) -> tuple[str, Any]:
+    message = str(exc)
+    response_payload: Any = None
+    response = getattr(exc, "response", None)
+    if response is not None:
+        try:
+            response_payload = response.json()
+        except Exception:  # noqa: BLE001
+            response_payload = response.text
+        if response_payload:
+            try:
+                payload_text = json.dumps(response_payload, ensure_ascii=False)
+            except Exception:  # noqa: BLE001
+                payload_text = str(response_payload)
+            message = f"{message} | {payload_text}"
+    return message, response_payload
+
+
 def upsert_cache_row(conn: sqlite3.Connection, segment: RouteSegment, result: dict[str, Any]) -> None:
     sql = """
         INSERT OR REPLACE INTO google_route_cache (
-            cache_key, attendance_uid, segment_no, segment_type,
+            cache_key, attendance_uid, attendance_key, segment_no, segment_type,
             origin_lat, origin_lon, destination_lat, destination_lon,
             travel_mode, routing_preference, distance_meters, duration_seconds,
             polyline, api_provider, request_payload, response_payload,
             status, error_message, calculated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     params = (
         segment.cache_key,
         segment.attendance_uid,
+        segment.attendance_key,
         segment.segment_no,
         segment.segment_type,
         segment.origin_lat,
@@ -353,9 +398,11 @@ def upsert_summary_rows(
     employee_lookup = employees.set_index("employee_id")
     segment_df = pd.DataFrame(segment_rows)
     attendance_meta = attendance_slice[["attendance_uid", "employee_id"]].copy()
-    merged = segment_df.merge(attendance_meta, on="attendance_uid", how="left")
+    attendance_meta["attendance_key"] = attendance_slice["attendance_key"]
+    merged = segment_df.merge(attendance_meta, on=["attendance_uid", "attendance_key"], how="left")
     output_rows: list[dict[str, Any]] = []
-    for attendance_uid, group in merged.groupby("attendance_uid"):
+    for attendance_key, group in merged.groupby("attendance_key"):
+        attendance_uid = group["attendance_uid"].iloc[0]
         employee_id = group["employee_id"].iloc[0]
         employee = employee_lookup.loc[employee_id] if employee_id in employee_lookup.index else None
         total_km = group["distance_meters"].fillna(0).sum() / 1000.0
@@ -366,6 +413,7 @@ def upsert_summary_rows(
         route_end_type = "home" if "last_to_home" in set(group["segment_type"]) else "first_last_gps_only"
         row = {
             "attendance_uid": attendance_uid,
+            "attendance_key": attendance_key,
             "route_mode": "google_routes_api",
             "segment_count": int(len(group)),
             "cached_segment_count": int((group["source"] == "cache").sum()),
@@ -383,10 +431,10 @@ def upsert_summary_rows(
         conn.execute(
             """
             INSERT OR REPLACE INTO google_route_summary (
-                attendance_uid, route_mode, segment_count, cached_segment_count, api_segment_count,
+                attendance_uid, attendance_key, route_mode, segment_count, cached_segment_count, api_segment_count,
                 estimated_total_km, estimated_business_km, estimated_travel_min,
                 route_start_type, route_end_type, route_confidence, route_notes, calculated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             tuple(row.values()),
         )
@@ -405,13 +453,14 @@ def compute_and_cache_routes(
     precision = normalize_coord_precision(coord_precision)
     segments = build_attendance_segments(attendance_slice, raw_events, employees, route_mode, precision)
     if not segments:
-        return {"summary_rows": pd.DataFrame(), "api_calls": 0, "cache_hits": 0, "segments": 0}
+        return {"summary_rows": pd.DataFrame(), "api_calls": 0, "cache_hits": 0, "failed_segments": 0, "segments": 0}
 
     with get_connection(db_path) as conn:
         cached = fetch_cached_segments_for_segments(conn, segments)
         rows: list[dict[str, Any]] = []
         api_calls = 0
         cache_hits = 0
+        failed_segments = 0
         for segment in segments:
             if segment.cache_key in cached:
                 cache_hits += 1
@@ -419,6 +468,7 @@ def compute_and_cache_routes(
                 rows.append(
                     {
                         "attendance_uid": segment.attendance_uid,
+                        "attendance_key": segment.attendance_key,
                         "segment_no": segment.segment_no,
                         "segment_type": segment.segment_type,
                         "distance_meters": float(row["distance_meters"] or 0),
@@ -433,18 +483,21 @@ def compute_and_cache_routes(
                 result["status"] = "ok"
                 api_calls += 1
             except Exception as exc:  # noqa: BLE001
+                error_message, response_payload = format_request_exception(exc)
+                failed_segments += 1
                 result = {
                     "distance_meters": None,
                     "duration_seconds": None,
                     "polyline": None,
-                    "response_payload": None,
+                    "response_payload": response_payload,
                     "status": "error",
-                    "error_message": str(exc),
+                    "error_message": error_message,
                 }
             upsert_cache_row(conn, segment, result)
             rows.append(
                 {
                     "attendance_uid": segment.attendance_uid,
+                    "attendance_key": segment.attendance_key,
                     "segment_no": segment.segment_no,
                     "segment_type": segment.segment_type,
                     "distance_meters": float(result["distance_meters"] or 0),
@@ -459,6 +512,7 @@ def compute_and_cache_routes(
         "summary_rows": summary_rows,
         "api_calls": api_calls,
         "cache_hits": cache_hits,
+        "failed_segments": failed_segments,
         "segments": len(segments),
     }
 
@@ -479,14 +533,14 @@ def rebuild_google_route_summary_from_cache(
             conn.commit()
         return pd.DataFrame()
 
-    expected_count_by_uid: dict[str, int] = {}
+    expected_count_by_key: dict[str, int] = {}
     for segment in segments:
-        expected_count_by_uid[segment.attendance_uid] = expected_count_by_uid.get(segment.attendance_uid, 0) + 1
+        expected_count_by_key[segment.attendance_key] = expected_count_by_key.get(segment.attendance_key, 0) + 1
 
     with get_connection(db_path) as conn:
         cached = fetch_cached_segments_for_segments(conn, segments)
         rows: list[dict[str, Any]] = []
-        cached_count_by_uid: dict[str, int] = {}
+        cached_count_by_key: dict[str, int] = {}
         for segment in segments:
             row = cached.get(segment.cache_key)
             if not row:
@@ -494,6 +548,7 @@ def rebuild_google_route_summary_from_cache(
             rows.append(
                 {
                     "attendance_uid": segment.attendance_uid,
+                    "attendance_key": segment.attendance_key,
                     "segment_no": segment.segment_no,
                     "segment_type": segment.segment_type,
                     "distance_meters": float(row["distance_meters"] or 0),
@@ -501,18 +556,18 @@ def rebuild_google_route_summary_from_cache(
                     "source": "cache",
                 }
             )
-            cached_count_by_uid[segment.attendance_uid] = cached_count_by_uid.get(segment.attendance_uid, 0) + 1
+            cached_count_by_key[segment.attendance_key] = cached_count_by_key.get(segment.attendance_key, 0) + 1
 
-        complete_uids = {
-            attendance_uid
-            for attendance_uid, expected_count in expected_count_by_uid.items()
-            if cached_count_by_uid.get(attendance_uid, 0) == expected_count
+        complete_keys = {
+            attendance_key
+            for attendance_key, expected_count in expected_count_by_key.items()
+            if cached_count_by_key.get(attendance_key, 0) == expected_count
         }
-        complete_rows = [row for row in rows if row["attendance_uid"] in complete_uids]
-        current_uids = attendance_slice["attendance_uid"].dropna().astype(str).unique().tolist()
-        if current_uids:
-            placeholders = ",".join(["?"] * len(current_uids))
-            conn.execute(f"DELETE FROM google_route_summary WHERE attendance_uid IN ({placeholders})", current_uids)
+        complete_rows = [row for row in rows if row["attendance_key"] in complete_keys]
+        current_keys = attendance_slice["attendance_key"].dropna().astype(str).unique().tolist()
+        if current_keys:
+            placeholders = ",".join(["?"] * len(current_keys))
+            conn.execute(f"DELETE FROM google_route_summary WHERE attendance_key IN ({placeholders})", current_keys)
         summary_rows = upsert_summary_rows(conn, attendance_slice, employees, complete_rows)
         conn.commit()
         return summary_rows
@@ -531,7 +586,7 @@ def load_google_route_cache(db_path: str | Path) -> pd.DataFrame:
         try:
             return pd.read_sql_query(
                 """
-                SELECT attendance_uid, segment_no, segment_type, polyline, distance_meters, duration_seconds, status
+                SELECT attendance_uid, attendance_key, segment_no, segment_type, polyline, distance_meters, duration_seconds, status
                 FROM google_route_cache
                 WHERE status = 'ok'
                 ORDER BY attendance_uid, segment_no
@@ -547,7 +602,7 @@ def load_google_route_cache_detail(db_path: str | Path) -> pd.DataFrame:
         try:
             return pd.read_sql_query(
                 """
-                SELECT attendance_uid, segment_no, segment_type, polyline, distance_meters,
+                SELECT attendance_uid, attendance_key, segment_no, segment_type, polyline, distance_meters,
                        duration_seconds, status, error_message, calculated_at
                 FROM google_route_cache
                 ORDER BY attendance_uid, segment_no, calculated_at DESC

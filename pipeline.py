@@ -147,7 +147,11 @@ def run_pipeline(config: AppConfig | None = None) -> dict[str, pd.DataFrame]:
 
     master_service = MasterDataService(config.data_dir)
     importer = CheckinImporter(config.data_dir)
-    matcher = Matcher(top_n=config.candidate_top_n)
+    matcher = Matcher(
+        top_n=config.candidate_top_n,
+        hospital_keywords=config.hospital_keywords,
+        hospital_exclude_keywords=config.hospital_exclude_keywords,
+    )
     routing = RoutingEngine(
         detour_index=config.detour_index,
         average_speed_kmph=config.average_speed_kmph,

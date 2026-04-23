@@ -166,6 +166,16 @@ st.markdown(
         font-weight: 700;
         margin-left: 0.35rem;
     }
+    .tag-hospital {
+        display: inline-block;
+        background: #dbeafe;
+        color: #1d4ed8;
+        border-radius: 999px;
+        padding: 0.12rem 0.5rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-left: 0.35rem;
+    }
     .stTabs [data-baseweb="tab-list"] {
         gap: 0.3rem;
     }
@@ -217,6 +227,23 @@ st.markdown(
         color: #0b2f49 !important;
         border-color: rgba(15, 61, 94, 0.35) !important;
         box-shadow: 0 0 0 0.1rem rgba(37, 99, 235, 0.12) !important;
+    }
+    div[data-testid="stNumberInput"] button,
+    div[data-baseweb="input"] button {
+        background: linear-gradient(135deg, #f8fbff 0%, #e8f0f7 100%) !important;
+        color: #0f3d5e !important;
+        border-left: 1px solid rgba(15, 61, 94, 0.18) !important;
+        box-shadow: none !important;
+    }
+    div[data-testid="stNumberInput"] button:hover,
+    div[data-baseweb="input"] button:hover {
+        background: linear-gradient(135deg, #eaf4ff 0%, #dbeaf7 100%) !important;
+        color: #0b2f49 !important;
+    }
+    div[data-testid="stNumberInput"] button svg,
+    div[data-baseweb="input"] button svg {
+        fill: #0f3d5e !important;
+        color: #0f3d5e !important;
     }
     @media print {
         @page {
@@ -290,8 +317,8 @@ def is_hospital_name(
     text = str(name or "").strip()
     if not text:
         return False
-    include = tuple(hospital_keywords or ("醫院", "醫學中心", "榮總"))
-    exclude = tuple(exclude_keywords or ("診所", "藥局", "衛生所"))
+    include = tuple(hospital_keywords or ("醫院", "衛生所", "療養院"))
+    exclude = tuple(exclude_keywords or ("診所", "藥局"))
     return any(keyword in text for keyword in include) and not any(keyword in text for keyword in exclude)
 
 def chunked(items: list[dict], size: int) -> list[list[dict]]:
@@ -306,6 +333,7 @@ def build_attendance_event_flags(raw_events: pd.DataFrame) -> pd.DataFrame:
                 "missing_punch_count",
                 "missing_punch_unprocessed_count",
                 "missing_punch_processed_count",
+                "forget_punch_application_count",
                 "missing_punch_unprocessed_flag",
                 "overtime_flag_bool",
                 "actual_overtime_flag",
@@ -316,12 +344,14 @@ def build_attendance_event_flags(raw_events: pd.DataFrame) -> pd.DataFrame:
     work = raw_events.copy()
     work["compare_result"] = work["compare_result"].fillna("").astype(str).str.strip()
     work["exception_action"] = work["exception_action"].fillna("").astype(str).str.strip()
+    work["source_type"] = work["source_type"].fillna("").astype(str).str.strip()
     work["overtime_flag"] = work["overtime_flag"].fillna("").astype(str).str.strip()
     work["overtime_reason"] = work["overtime_reason"].fillna("").astype(str).str.strip()
 
     work["missing_punch_flag"] = work["compare_result"].eq("未打卡")
     work["missing_punch_unprocessed_flag"] = work["missing_punch_flag"] & work["exception_action"].eq("待處理")
     work["missing_punch_processed_flag"] = work["missing_punch_flag"] & work["exception_action"].eq("已處理")
+    work["forget_punch_application_flag"] = work["source_type"].eq("忘刷申請")
     work["overtime_event_flag"] = work["overtime_flag"].eq("*")
     work["actual_overtime_event_flag"] = work["overtime_event_flag"] & work["overtime_reason"].eq("實際加班")
     work["personal_overtime_event_flag"] = work["overtime_event_flag"] & work["overtime_reason"].eq("個人因素")
@@ -332,6 +362,7 @@ def build_attendance_event_flags(raw_events: pd.DataFrame) -> pd.DataFrame:
             missing_punch_count=("missing_punch_flag", "sum"),
             missing_punch_unprocessed_count=("missing_punch_unprocessed_flag", "sum"),
             missing_punch_processed_count=("missing_punch_processed_flag", "sum"),
+            forget_punch_application_count=("forget_punch_application_flag", "sum"),
             missing_punch_unprocessed_flag=("missing_punch_unprocessed_flag", "max"),
             overtime_flag_bool=("overtime_event_flag", "max"),
             actual_overtime_flag=("actual_overtime_event_flag", "max"),
@@ -600,6 +631,36 @@ def build_nearest_hospital_lookup(raw_events: pd.DataFrame, hospitals: pd.DataFr
     return pd.DataFrame(rows)
 
 
+def build_nearest_existing_client_lookup(raw_events: pd.DataFrame, hospitals: pd.DataFrame, clients: pd.DataFrame) -> pd.DataFrame:
+    client_ids = set(clients["hospital_id"].dropna().astype(str))
+    client_pool = hospitals.loc[
+        hospitals["hospital_id"].astype(str).isin(client_ids)
+        & hospitals["lat"].notna()
+        & hospitals["lon"].notna(),
+        ["hospital_id", "hospital_name", "lat", "lon"],
+    ].copy()
+    if client_pool.empty:
+        return pd.DataFrame(columns=["event_uid", "nearest_client_name", "nearest_client_meter"])
+
+    client_lats = client_pool["lat"].astype(float).to_numpy()
+    client_lons = client_pool["lon"].astype(float).to_numpy()
+    client_names = client_pool["hospital_name"].astype(str).to_numpy()
+    rows: list[dict] = []
+    for _, event in raw_events.dropna(subset=["gps_lat", "gps_lon"]).iterrows():
+        distances = haversine_m(float(event["gps_lat"]), float(event["gps_lon"]), client_lats, client_lons)
+        if len(distances) == 0:
+            continue
+        nearest_idx = int(np.argmin(distances))
+        rows.append(
+            {
+                "event_uid": event["event_uid"],
+                "nearest_client_name": client_names[nearest_idx],
+                "nearest_client_meter": float(distances[nearest_idx]),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def decode_polyline(polyline_str: str | None) -> list[tuple[float, float]]:
     if not polyline_str:
         return []
@@ -747,7 +808,7 @@ def load_results():
     finance = pd.read_csv(base / "finance_audit_result.csv", encoding="utf-8-sig")
     daily_metrics = pd.read_csv(base / "bi_daily_metrics.csv", encoding="utf-8-sig")
     raw_events = pd.read_csv(base / "raw_check_events.csv", encoding="utf-8-sig")
-    matches = pd.read_csv(base / "route_stop_match.csv", encoding="utf-8-sig")
+    matches = pd.read_csv(base / "route_stop_match.csv", encoding="utf-8-sig", low_memory=False)
     hospitals = pd.read_csv(base / "hospital_master_clean.csv", encoding="utf-8-sig")
     clients = pd.read_csv(base / "client_master.csv", encoding="utf-8-sig")
     employees = pd.read_csv(base / "employee_master.csv", encoding="utf-8-sig")
@@ -841,15 +902,21 @@ def load_results():
     match_enriched["is_hospital_facility"] = match_enriched["hospital_name"].apply(
         lambda name: is_hospital_name(name, config.hospital_keywords, config.hospital_exclude_keywords)
     )
+    if "selection_type" not in match_enriched.columns:
+        match_enriched["selection_type"] = np.where(
+            match_enriched["hospital_id"].astype(str).isin(client_ids),
+            "既有客戶",
+            np.where(match_enriched["is_hospital_facility"], "醫院", "潛在院所"),
+        )
 
     selected_match = (
-        match_enriched.loc[match_enriched["is_selected"] == 1, ["event_uid", "hospital_id", "hospital_name", "client_tag"]]
+        match_enriched.loc[match_enriched["is_selected"] == 1, ["event_uid", "hospital_id", "hospital_name", "selection_type"]]
         .drop_duplicates(subset=["event_uid"])
         .rename(
             columns={
                 "hospital_id": "selected_hospital_id",
                 "hospital_name": "selected_hospital_name",
-                "client_tag": "selected_client_tag",
+                "selection_type": "selected_client_tag",
             }
         )
     )
@@ -858,9 +925,11 @@ def load_results():
         .drop_duplicates(subset=["event_uid"])
         .rename(columns={"hospital_name": "nearest_hospital_name", "beeline_meter": "nearest_hospital_meter"})
     )
+    nearest_client = build_nearest_existing_client_lookup(raw_events, hospitals, clients)
     nearest_hospital_only = build_nearest_hospital_lookup(raw_events, hospitals, config)
     raw_events = raw_events.merge(selected_match, on="event_uid", how="left")
     raw_events = raw_events.merge(nearest_match, on="event_uid", how="left")
+    raw_events = raw_events.merge(nearest_client, on="event_uid", how="left")
     raw_events = raw_events.merge(nearest_hospital_only, on="event_uid", how="left")
 
     return {
@@ -1131,6 +1200,8 @@ def build_candidate_panel(day_events: pd.DataFrame, matches: pd.DataFrame) -> li
                 "gps_lon",
                 "selected_hospital_name",
                 "selected_client_tag",
+                "nearest_client_name",
+                "nearest_client_meter",
                 "nearest_hospital_name",
                 "nearest_hospital_meter",
                 "nearest_hospital_only_name",
@@ -1145,14 +1216,20 @@ def build_candidate_panel(day_events: pd.DataFrame, matches: pd.DataFrame) -> li
     for _, group in candidates.groupby(["seq_no", "event_uid", "actual_time_display", "gps_lat", "gps_lon"], dropna=False):
         group = group.sort_values("candidate_rank").copy()
         first_row = group.iloc[0]
+        selected_row = group.loc[group["is_selected"] == 1].head(1)
+        top_candidates = group.head(5).copy()
+        if not selected_row.empty and int(selected_row.iloc[0]["candidate_rank"]) not in set(top_candidates["candidate_rank"].tolist()):
+            top_candidates = pd.concat([top_candidates, selected_row], ignore_index=True)
+            top_candidates = top_candidates.drop_duplicates(subset=["candidate_rank"], keep="first")
         candidate_items = []
-        for _, row in group.head(5).iterrows():
+        for _, row in top_candidates.iterrows():
             candidate_items.append(
                 {
                     "rank": int(row["candidate_rank"]),
                     "name": row["hospital_label"],
                     "distance": float(row["beeline_meter"]),
-                    "tag": row["client_tag"],
+                    "tag": "既有客戶" if row["client_tag"] == "既有客戶" else ("醫院" if bool(row.get("is_hospital_facility", False)) else "潛在院所"),
+                    "selected": int(row.get("is_selected", 0)) == 1,
                 }
             )
         panels.append(
@@ -1167,6 +1244,8 @@ def build_candidate_panel(day_events: pd.DataFrame, matches: pd.DataFrame) -> li
                 "nearest_hospital_only_meter": float(first_row["nearest_hospital_only_meter"]) if pd.notna(first_row["nearest_hospital_only_meter"]) else None,
                 "selected_hospital_name": first_row["selected_hospital_name"],
                 "selected_client_tag": first_row["selected_client_tag"],
+                "nearest_client_name": first_row["nearest_client_name"],
+                "nearest_client_meter": first_row["nearest_client_meter"],
                 "candidates": candidate_items,
             }
         )
@@ -1182,7 +1261,7 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
         """
         <div class="candidate-panel-header">
             <div class="candidate-title">打卡點候選院所</div>
-            <div class="candidate-sub">依每個 GPS 打卡點列出最近院所、最近醫院、系統選定院所與前五候選名單。</div>
+            <div class="candidate-sub">依每個 GPS 打卡點列出最近既有客戶、最近醫院、系統選定院所與前五候選名單。</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1190,12 +1269,16 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
     for row_panels in chunked(candidate_panels, 3):
         columns = st.columns(3)
         for column, panel in zip(columns, row_panels):
-            selected_tag_class = "tag-client" if panel["selected_client_tag"] == "既有客戶" else "tag-potential"
+            selected_tag_class = (
+                "tag-client" if panel["selected_client_tag"] == "既有客戶"
+                else "tag-hospital" if panel["selected_client_tag"] == "醫院"
+                else "tag-potential"
+            )
             selected_tag = panel["selected_client_tag"] or "未判定"
-            nearest_facility_text = (
-                f"{panel['nearest_hospital_name']} · {panel['nearest_hospital_meter']:.0f} m"
-                if panel["nearest_hospital_name"] and panel["nearest_hospital_meter"] is not None
-                else "無最近院所資料"
+            nearest_client_text = (
+                f"{panel['nearest_client_name']} · {panel['nearest_client_meter']:.0f} m"
+                if panel["nearest_client_name"] and panel["nearest_client_meter"] is not None
+                else "無既有客戶資料"
             )
             nearest_text = (
                 f"{panel['nearest_hospital_only_name']} · {panel['nearest_hospital_only_meter']:.0f} m"
@@ -1204,9 +1287,15 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
             )
             list_items = []
             for item in panel["candidates"]:
-                tag_class = "tag-client" if item["tag"] == "既有客戶" else "tag-potential"
+                tag_class = (
+                    "tag-client" if item["tag"] == "既有客戶"
+                    else "tag-hospital" if item["tag"] == "醫院"
+                    else "tag-potential"
+                )
+                selected_suffix = "（系統選定）" if item.get("selected") else ""
+                rank_suffix = f"（候選#{item['rank']}）" if int(item["rank"]) > 5 else ""
                 list_items.append(
-                    f"<li>{item['rank']}. {item['name']} · {item['distance']:.0f} m "
+                    f"<li>{item['name']}{selected_suffix}{rank_suffix} · {item['distance']:.0f} m "
                     f"<span class=\"{tag_class}\">{item['tag']}</span></li>"
                 )
             selected_name = panel["selected_hospital_name"] or "未判定"
@@ -1214,7 +1303,7 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
             <div class="candidate-card">
                 <div class="candidate-title">#{panel['seq_no']} {panel['time']}</div>
                 <div class="candidate-sub">座標：{panel['lat']:.6f}, {panel['lon']:.6f}</div>
-                <div class="candidate-sub">最近院所：{nearest_facility_text}</div>
+                <div class="candidate-sub">最近既有客戶：{nearest_client_text}</div>
                 <div class="candidate-sub">最近醫院：{nearest_text}</div>
                 <div class="candidate-sub">系統選定：{selected_name}<span class="{selected_tag_class}">{selected_tag}</span></div>
                 <ol class="candidate-list">
@@ -1264,6 +1353,7 @@ def summarize_period(
                     "missing_punch_count",
                     "missing_punch_unprocessed_count",
                     "missing_punch_processed_count",
+                    "forget_punch_application_count",
                     "missing_punch_unprocessed_flag",
                     "overtime_flag_bool",
                     "actual_overtime_flag",
@@ -1294,6 +1384,7 @@ def summarize_period(
         "missing_punch_count",
         "missing_punch_unprocessed_count",
         "missing_punch_processed_count",
+        "forget_punch_application_count",
     ]:
         merged[column] = pd.to_numeric(merged[column], errors="coerce").fillna(0).astype(int)
     for column in ["missing_punch_unprocessed_flag", "overtime_flag_bool", "actual_overtime_flag", "personal_overtime_flag"]:
@@ -1317,6 +1408,7 @@ def summarize_period(
                 "平均每日公務里程": round(merged["estimated_business_km"].fillna(0).mean(), 2),
                 "未打卡未處理次數": int(merged["missing_punch_unprocessed_count"].fillna(0).sum()),
                 "未打卡已處理次數": int(merged["missing_punch_processed_count"].fillna(0).sum()),
+                "忘刷申請總次數": int(merged["forget_punch_application_count"].fillna(0).sum()),
                 "異常率": round(float(merged["anomaly_flag"].fillna(False).mean()), 4),
                 "超時出勤率": round(float(merged["overtime_flag_bool"].fillna(False).mean()), 4),
                 "實際加班率": round(float(merged["actual_overtime_flag"].fillna(False).mean()), 4),
@@ -1340,6 +1432,7 @@ def summarize_period(
             "matched_stop_count",
             "missing_punch_unprocessed_count",
             "missing_punch_processed_count",
+            "forget_punch_application_count",
             "overtime_flag_bool",
             "actual_overtime_flag",
             "personal_overtime_flag",
@@ -1362,6 +1455,7 @@ def summarize_period(
             "matched_stop_count": "匹配院所數",
             "missing_punch_unprocessed_count": "未打卡未處理次數",
             "missing_punch_processed_count": "未打卡已處理次數",
+            "forget_punch_application_count": "忘刷申請次數",
             "overtime_flag_bool": "超時出勤",
             "actual_overtime_flag": "實際加班",
             "personal_overtime_flag": "個人因素超時",
@@ -1432,6 +1526,103 @@ def build_overview_summary(
     return summary
 
 
+def normalize_year_month_value(value) -> str | None:
+    if pd.isna(value):
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "nat"}:
+        return None
+    for fmt in ("%Y-%m", "%Y/%m", "%Y-%m-%d", "%Y/%m/%d", "%b-%y", "%b-%Y", "%Y%m", "%m/%Y"):
+        try:
+            return pd.to_datetime(text, format=fmt).strftime("%Y-%m")
+        except (TypeError, ValueError):
+            continue
+    try:
+        return pd.to_datetime(text, errors="raise").strftime("%Y-%m")
+    except (TypeError, ValueError):
+        return None
+
+
+def months_in_range(start_date, end_date) -> list[str]:
+    start_ts = pd.Timestamp(start_date).to_period("M")
+    end_ts = pd.Timestamp(end_date).to_period("M")
+    return [str(period) for period in pd.period_range(start_ts, end_ts, freq="M")]
+
+
+def build_monthly_claim_comparison(
+    routes: pd.DataFrame,
+    monthly_claims: pd.DataFrame | None,
+    green_threshold: float,
+    yellow_threshold: float,
+) -> pd.DataFrame:
+    comparison_columns = [
+        "employee_id",
+        "employee_label",
+        "department",
+        "year_month",
+        "claimed_km",
+        "estimated_business_km",
+        "difference_km",
+        "difference_rate",
+        "difference_rate_abs",
+        "comparison_light",
+    ]
+    if routes.empty:
+        return pd.DataFrame(columns=comparison_columns)
+
+    route_monthly = routes.copy()
+    if "employee_label" not in route_monthly.columns:
+        route_monthly["employee_label"] = route_monthly.get("employee_id", "").astype("string")
+    if "department" not in route_monthly.columns:
+        route_monthly["department"] = ""
+    route_monthly["work_date"] = pd.to_datetime(route_monthly["work_date"], errors="coerce")
+    route_monthly["year_month"] = route_monthly["work_date"].dt.strftime("%Y-%m")
+    route_monthly["estimated_business_km"] = pd.to_numeric(route_monthly["estimated_business_km"], errors="coerce").fillna(0.0)
+    route_monthly = (
+        route_monthly.dropna(subset=["employee_id", "year_month"])
+        .groupby(["employee_id", "employee_label", "department", "year_month"], dropna=False, as_index=False)["estimated_business_km"]
+        .sum()
+    )
+
+    if monthly_claims is None or monthly_claims.empty:
+        comparison = route_monthly.copy()
+        comparison["claimed_km"] = np.nan
+    else:
+        claims = monthly_claims.copy()
+        claims["employee_id"] = claims["employee_id"].astype("string").str.strip()
+        claims["year_month"] = claims["year_month"].apply(normalize_year_month_value)
+        claims["claimed_km"] = pd.to_numeric(claims["claimed_km"], errors="coerce")
+        claims = (
+            claims.dropna(subset=["employee_id", "year_month", "claimed_km"])
+            .groupby(["employee_id", "year_month"], dropna=False, as_index=False)["claimed_km"]
+            .sum()
+        )
+        comparison = route_monthly.merge(claims, on=["employee_id", "year_month"], how="outer")
+        comparison["employee_label"] = comparison["employee_label"].fillna(comparison["employee_id"])
+        comparison["estimated_business_km"] = pd.to_numeric(comparison["estimated_business_km"], errors="coerce").fillna(0.0)
+
+    comparison["claimed_km"] = pd.to_numeric(comparison["claimed_km"], errors="coerce")
+    comparison["difference_km"] = comparison["claimed_km"].fillna(0.0) - comparison["estimated_business_km"].fillna(0.0)
+    denominator = comparison["claimed_km"].where(comparison["claimed_km"].fillna(0) > 0)
+    comparison["difference_rate"] = comparison["difference_km"] / denominator
+    comparison["difference_rate_abs"] = comparison["difference_rate"].abs()
+
+    def classify(row: pd.Series) -> str:
+        if pd.isna(row["claimed_km"]):
+            return "gray"
+        variance = row["difference_rate_abs"]
+        if pd.isna(variance):
+            return "gray"
+        if variance <= green_threshold:
+            return "green"
+        if variance <= yellow_threshold:
+            return "yellow"
+        return "red"
+
+    comparison["comparison_light"] = comparison.apply(classify, axis=1)
+    return comparison[comparison_columns].sort_values(["year_month", "employee_id"]).reset_index(drop=True)
+
+
 tables = load_results()
 config = tables["config"]
 attendance = tables["attendance"]
@@ -1444,6 +1635,14 @@ employees = tables["employees"]
 google_route_summary = tables["google_route_summary"]
 google_route_cache = tables["google_route_cache"]
 google_route_cache_detail = tables["google_route_cache_detail"]
+monthly_claims_path = Path(config.data_dir) / "monthly_claims.csv"
+monthly_claims = pd.read_csv(monthly_claims_path, encoding="utf-8-sig") if monthly_claims_path.exists() else pd.DataFrame()
+monthly_claim_comparison = build_monthly_claim_comparison(
+    routes=routes,
+    monthly_claims=monthly_claims,
+    green_threshold=float(config.light_green_pct),
+    yellow_threshold=float(config.light_yellow_pct),
+)
 
 raw_events["employee_label"] = raw_events.apply(
     lambda row: make_employee_label(row["employee_id"], row["employee_name"]),
@@ -1613,6 +1812,8 @@ with tab_daily:
             "gps_lon",
             "compare_result",
             "source_type",
+            "nearest_client_name",
+            "nearest_client_meter",
             "nearest_hospital_name",
             "nearest_hospital_meter",
             "nearest_hospital_only_name",
@@ -1628,6 +1829,8 @@ with tab_daily:
             "gps_lon": "經度",
             "compare_result": "比對結果",
             "source_type": "來源",
+            "nearest_client_name": "最近既有客戶",
+            "nearest_client_meter": "最近既有客戶距離(公尺)",
             "nearest_hospital_name": "最近院所",
             "nearest_hospital_meter": "最近院所距離(公尺)",
             "nearest_hospital_only_name": "最近醫院",
@@ -1645,6 +1848,7 @@ with tab_daily:
             column_config={
                 "緯度": st.column_config.NumberColumn(format="%.6f"),
                 "經度": st.column_config.NumberColumn(format="%.6f"),
+                "最近既有客戶距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
                 "最近院所距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
                 "最近醫院距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
             },
@@ -1723,6 +1927,11 @@ with tab_period:
         selected_period = f"{start_date} ~ {end_date}"
 
     summary_df, detail_df = summarize_period(period_employee_id, start_date, end_date, attendance, daily_metrics, routes, attendance_event_flags)
+    period_months = months_in_range(start_date, end_date)
+    period_monthly_claims = monthly_claim_comparison.loc[
+        (monthly_claim_comparison["employee_id"] == period_employee_id)
+        & (monthly_claim_comparison["year_month"].isin(period_months))
+    ].copy()
 
     if summary_df.empty:
         st.warning("目前選擇條件沒有對應資料。")
@@ -1743,10 +1952,52 @@ with tab_period:
         metric_row3[1].metric("平均每日公務里程", f"{summary_row['平均每日公務里程']:.2f} km")
         metric_row3[2].metric("未打卡未處理次數", int(summary_row["未打卡未處理次數"]))
         metric_row3[3].metric("實際加班率", f"{summary_row['實際加班率']:.2%}")
+        metric_row4 = st.columns(4)
+        metric_row4[0].metric("忘刷申請總次數", int(summary_row["忘刷申請總次數"]))
 
         st.markdown("**報表摘要**")
         summary_show = summary_df.rename(columns={"總匹配院所次數": "匹配院所總次數"})
         st.dataframe(summary_show, width="stretch", hide_index=True)
+
+        st.markdown("**月申請里程 vs 系統預估公務里程**")
+        st.caption("以所選期間涵蓋到的月份整月比較，因此週報或自訂區間也會顯示對應月份的整月申請與整月預估。")
+        period_claim_cols = st.columns(4)
+        if period_monthly_claims.empty:
+            period_claim_cols[0].metric("月申請里程", "-")
+            period_claim_cols[1].metric("月預估公務里程", "-")
+            period_claim_cols[2].metric("差異里程", "-")
+            period_claim_cols[3].metric("差異率", "-")
+            st.info("所選月份目前沒有可比較的月申請里程資料。")
+        else:
+            claim_total = float(period_monthly_claims["claimed_km"].fillna(0).sum())
+            estimate_total = float(period_monthly_claims["estimated_business_km"].fillna(0).sum())
+            diff_total = float(period_monthly_claims["difference_km"].fillna(0).sum())
+            diff_rate = (diff_total / claim_total) if claim_total > 0 else np.nan
+            period_claim_cols[0].metric("月申請里程", f"{claim_total:.2f} km")
+            period_claim_cols[1].metric("月預估公務里程", f"{estimate_total:.2f} km")
+            period_claim_cols[2].metric("差異里程", f"{diff_total:+.2f} km")
+            period_claim_cols[3].metric("差異率", f"{diff_rate:.2%}" if pd.notna(diff_rate) else "-")
+            period_claim_table = period_monthly_claims.rename(
+                columns={
+                    "year_month": "月份",
+                    "claimed_km": "實際月申請里程",
+                    "estimated_business_km": "系統預估月公務里程",
+                    "difference_km": "差異里程",
+                    "difference_rate": "差異率",
+                    "comparison_light": "比較燈號",
+                }
+            )
+            st.dataframe(
+                period_claim_table,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "實際月申請里程": st.column_config.NumberColumn(format="%.2f km"),
+                    "系統預估月公務里程": st.column_config.NumberColumn(format="%.2f km"),
+                    "差異里程": st.column_config.NumberColumn(format="%+.2f km"),
+                    "差異率": st.column_config.NumberColumn(format="%.2%"),
+                },
+            )
 
         employee_matches = matches.loc[
             matches["attendance_uid"].isin(
@@ -1786,6 +2037,7 @@ with tab_period:
                     "預估移動分鐘": st.column_config.NumberColumn(format="%.1f"),
                     "未打卡未處理次數": st.column_config.NumberColumn(format="%d"),
                     "未打卡已處理次數": st.column_config.NumberColumn(format="%d"),
+                    "忘刷申請次數": st.column_config.NumberColumn(format="%d"),
                     "超時出勤": st.column_config.CheckboxColumn(),
                     "實際加班": st.column_config.CheckboxColumn(),
                     "個人因素超時": st.column_config.CheckboxColumn(),
@@ -1877,6 +2129,36 @@ with tab_overview:
         overview_start_date,
         overview_end_date,
     )
+    overview_months = months_in_range(overview_start_date, overview_end_date)
+    overview_claims = monthly_claim_comparison.loc[
+        monthly_claim_comparison["year_month"].isin(overview_months)
+    ].copy()
+    if overview_claims.empty:
+        overview_claim_employee = pd.DataFrame(
+            columns=[
+                "employee_id",
+                "employee_label",
+                "department",
+                "實際月申請里程",
+                "系統預估月公務里程",
+                "差異里程",
+                "差異率",
+                "差異率絕對值",
+            ]
+        )
+    else:
+        overview_claim_employee = (
+            overview_claims.groupby(["employee_id", "employee_label", "department"], dropna=False, as_index=False)
+            .agg(
+                實際月申請里程=("claimed_km", lambda s: round(s.fillna(0).sum(), 2)),
+                系統預估月公務里程=("estimated_business_km", lambda s: round(s.fillna(0).sum(), 2)),
+                差異里程=("difference_km", lambda s: round(s.fillna(0).sum(), 2)),
+            )
+        )
+        denominator = overview_claim_employee["實際月申請里程"].where(overview_claim_employee["實際月申請里程"] > 0)
+        overview_claim_employee["差異率"] = overview_claim_employee["差異里程"] / denominator
+        overview_claim_employee["差異率絕對值"] = overview_claim_employee["差異率"].abs()
+        overview_claim_employee = overview_claim_employee.sort_values("差異率絕對值", ascending=False)
 
     overview_col2.metric("納入比較員工數", len(overview_summary))
     top_row = st.columns(4)
@@ -1947,6 +2229,95 @@ with tab_overview:
             )
             fig_subsidy.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
             st.plotly_chart(fig_subsidy, width="stretch")
+
+    claim_chart1, claim_chart2 = st.columns(2)
+    with claim_chart1:
+        st.markdown("**員工月申請里程 vs 系統預估公務里程**")
+        if overview_claim_employee.empty:
+            st.info("所選月份目前沒有可比較的月申請里程資料。")
+        else:
+            claim_bar_df = overview_claim_employee.melt(
+                id_vars=["employee_id", "employee_label", "department"],
+                value_vars=["實際月申請里程", "系統預估月公務里程"],
+                var_name="指標",
+                value_name="公里數",
+            )
+            fig_claim_bar = px.bar(
+                claim_bar_df,
+                x="employee_label",
+                y="公里數",
+                color="指標",
+                barmode="group",
+                hover_data=["department"],
+                labels={"employee_label": "員工", "公里數": "公里數", "department": "部門"},
+            )
+            fig_claim_bar.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
+            st.plotly_chart(fig_claim_bar, width="stretch")
+    with claim_chart2:
+        st.markdown("**差異率排名**")
+        if overview_claim_employee.empty:
+            st.info("所選月份目前沒有可比較的月申請里程資料。")
+        else:
+            ranking_df = overview_claim_employee.copy()
+            ranking_df["差異率顯示"] = ranking_df["差異率"].fillna(0.0)
+            fig_claim_rank = px.bar(
+                ranking_df.sort_values("差異率絕對值", ascending=True),
+                x="差異率顯示",
+                y="employee_label",
+                color="department",
+                orientation="h",
+                labels={"employee_label": "員工", "差異率顯示": "差異率", "department": "部門"},
+                hover_data={
+                    "實際月申請里程": ":.2f",
+                    "系統預估月公務里程": ":.2f",
+                    "差異里程": ":.2f",
+                    "差異率絕對值": False,
+                },
+            )
+            fig_claim_rank.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10))
+            st.plotly_chart(fig_claim_rank, width="stretch")
+
+    st.markdown("**月申請里程散點圖**")
+    if overview_claim_employee.empty:
+        st.info("所選月份目前沒有可比較的月申請里程資料。")
+    else:
+        scatter_df = overview_claim_employee.copy()
+        scatter_df["差異率絕對值"] = scatter_df["差異率絕對值"].fillna(0.0)
+        max_axis_value = float(
+            max(
+                scatter_df["實際月申請里程"].fillna(0).max(),
+                scatter_df["系統預估月公務里程"].fillna(0).max(),
+                1.0,
+            )
+        )
+        fig_claim_scatter = px.scatter(
+            scatter_df,
+            x="系統預估月公務里程",
+            y="實際月申請里程",
+            color="department",
+            size="差異率絕對值",
+            hover_name="employee_label",
+            labels={
+                "系統預估月公務里程": "系統預估月公務里程",
+                "實際月申請里程": "實際月申請里程",
+                "department": "部門",
+                "差異率絕對值": "差異率絕對值",
+            },
+        )
+        fig_claim_scatter.add_shape(
+            type="line",
+            x0=0,
+            y0=0,
+            x1=max_axis_value,
+            y1=max_axis_value,
+            line=dict(color="#64748b", width=2),
+        )
+        fig_claim_scatter.update_layout(height=460, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(fig_claim_scatter, width="stretch")
+        st.caption(
+            f"月申請里程比較燈號門檻沿用財務設定：綠燈差異率 <= {float(config.light_green_pct):.0%}，"
+            f"黃燈差異率 <= {float(config.light_yellow_pct):.0%}，超過則視為紅燈。差異率以實際月申請里程為分母。"
+        )
 
     st.markdown("**全業務明細表**")
     st.dataframe(

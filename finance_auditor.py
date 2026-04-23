@@ -12,6 +12,23 @@ def _now_text() -> str:
     return datetime.now().strftime(NOW_FMT)
 
 
+def _normalize_year_month(value) -> str | None:
+    if pd.isna(value):
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "nat"}:
+        return None
+    for fmt in ("%Y-%m", "%Y/%m", "%Y-%m-%d", "%Y/%m/%d", "%b-%y", "%b-%Y", "%Y%m", "%m/%Y"):
+        try:
+            return pd.to_datetime(text, format=fmt).strftime("%Y-%m")
+        except (TypeError, ValueError):
+            continue
+    try:
+        return pd.to_datetime(text, errors="raise").strftime("%Y-%m")
+    except (TypeError, ValueError):
+        return None
+
+
 class FinanceAuditor:
     def __init__(
         self,
@@ -43,12 +60,12 @@ class FinanceAuditor:
         claim_map: dict[tuple[str, str], float] = {}
         if monthly_claims is not None and not monthly_claims.empty:
             monthly_claims = monthly_claims.copy()
-            monthly_claims["year_month"] = monthly_claims["year_month"].astype("string")
+            monthly_claims["year_month"] = monthly_claims["year_month"].apply(_normalize_year_month).astype("string")
             monthly_claims["employee_id"] = monthly_claims["employee_id"].astype("string")
             monthly_claims["claimed_km"] = pd.to_numeric(monthly_claims["claimed_km"], errors="coerce")
             claim_map = {
                 (row["employee_id"], row["year_month"]): float(row["claimed_km"])
-                for _, row in monthly_claims.dropna(subset=["claimed_km"]).iterrows()
+                for _, row in monthly_claims.dropna(subset=["year_month", "claimed_km"]).iterrows()
             }
         approved_month_map = (
             work_df.groupby(["employee_id", "year_month"])["estimated_business_km"].sum().to_dict()

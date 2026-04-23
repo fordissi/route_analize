@@ -99,34 +99,39 @@
   - 目前公式：`0.45 + matched_stop_count / total_stop_count * 0.55`
   - 上限為 `1.0`
 
-### 最近院所
-- 資料來源：候選匹配結果 `route_stop_match`
+### 最近既有客戶
+- 資料來源：醫療院所主檔 + 既有客戶名單
 - 計算方式：
-  - 取該打卡點 `candidate_rank = 1` 的院所
+  - 從全部既有客戶院所中找出距離該打卡點最近者
+  - 不受前五候選限制
 
 ### 最近醫院
-- 資料來源：候選匹配結果 `route_stop_match`
+- 資料來源：醫療院所主檔
 - 計算方式：
-  - 在候選院所中挑選名稱可判定為「醫院」的最近者
-  - 目前用名稱 heuristic 識別，例如包含：
+  - 從全部院所主檔中挑選名稱可判定為「醫院」的最近者
+  - 目前預設包含：
     - `醫院`
-    - `醫學中心`
-    - `榮總`
-  - 目前排除：
+    - `衛生所`
+    - `療養院`
+  - 目前預設排除：
     - `診所`
     - `藥局`
-    - `衛生所`
 
 ### 系統選定院所
 - 資料來源：`route_stop_match.is_selected = 1`
 - 計算方式：
-  - 由近鄰候選院所依距離與既有客戶加權後選出一筆
+  - 先從較大的候選池中判斷優先序，再選出一筆
+  - 目前優先序：
+    - `既有客戶`
+    - `1000 公尺內的醫院`
+    - `潛在院所`
 
 ### 前五可能拜訪院所
 - 資料來源：`route_stop_match`
 - 計算方式：
-  - 每個打卡點保留 KDTree 找出的前 5 個候選院所
-  - 會顯示距離與是否為既有客戶
+  - 每個打卡點畫面上預設顯示最近的前 5 個候選院所
+  - 若系統選定院所不在前 5 名，也會額外顯示該筆
+  - 會顯示距離與院所類型（既有客戶 / 醫院 / 潛在院所）
 
 ## 3. 個人期間報表
 
@@ -203,6 +208,16 @@
 - 資料來源：`daily_route_summary.matched_stop_count`
 - 計算方式：期間內加總
 
+### 月申請里程 vs 系統預估公務里程
+- 資料來源：
+  - `monthly_claims.csv.claimed_km`
+  - `daily_route_summary.estimated_business_km`
+- 計算方式：
+  - 先將 `monthly_claims.csv.year_month` 正規化成 `YYYY-MM`
+  - 再用 `employee_id + year_month` 聚合月申請里程
+  - 系統端則用同員工同月份的 `estimated_business_km` 加總成月預估公務里程
+  - 個人頁若選週報或自訂區間，會以涵蓋到的月份整月比較
+
 ### 最常拜訪院所
 - 資料來源：`route_stop_match`
 - 計算方式：
@@ -226,6 +241,34 @@
 - 資料來源：`raw_check_events.compare_result`、`raw_check_events.exception_action`
 - 計算方式：
   - 依員工於所選區間加總 `未打卡且待處理` 的事件筆數
+
+### 員工月申請里程 vs 系統預估公務里程
+- 資料來源：
+  - `monthly_claims.csv.claimed_km`
+  - `daily_route_summary.estimated_business_km`
+- 計算方式：
+  - 先篩出所選日期區間涵蓋到的月份
+  - 以月份整月為單位，彙總各員工的申請里程與預估公務里程
+  - 用群組柱狀圖對照每位員工兩組數值
+
+### 差異率排名
+- 資料來源：
+  - `monthly_claims.csv.claimed_km`
+  - `daily_route_summary.estimated_business_km`
+- 計算方式：
+  - `差異里程 = 實際月申請里程 - 系統預估月公務里程`
+  - `差異率 = 差異里程 / 實際月申請里程`
+  - 以差異率絕對值排序顯示
+
+### 月申請里程散點圖
+- 資料來源：
+  - `monthly_claims.csv.claimed_km`
+  - `daily_route_summary.estimated_business_km`
+- 計算方式：
+  - X 軸為系統預估月公務里程
+  - Y 軸為實際月申請里程
+  - 參考線 `y = x` 代表申請值與預估值完全一致
+  - 點越偏離參考線，代表差異越大
 
 ### 出勤時數與 GPS 點數比較
 - 資料來源：

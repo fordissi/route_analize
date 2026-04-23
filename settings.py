@@ -31,8 +31,8 @@ class AppConfig:
     light_green_pct: float = 0.15
     light_yellow_pct: float = 0.30
     google_maps_enabled: bool = False
-    hospital_keywords: tuple[str, ...] = ("醫院", "醫學中心", "榮總")
-    hospital_exclude_keywords: tuple[str, ...] = ("診所", "藥局", "衛生所")
+    hospital_keywords: tuple[str, ...] = ("醫院", "衛生所", "療養院")
+    hospital_exclude_keywords: tuple[str, ...] = ("診所", "藥局")
 
 
 CONFIG_OVERRIDE_FIELDS = {
@@ -112,7 +112,7 @@ def build_config(root_dir: str | Path | None = None) -> AppConfig:
     output_dir = root / "outputs"
     imports_dir = output_dir / "imports"
     attendance_import_dir = imports_dir / "attendance"
-    return AppConfig(
+    config = AppConfig(
         root_dir=root,
         data_dir=root,
         output_dir=output_dir,

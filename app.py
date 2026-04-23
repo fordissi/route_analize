@@ -4,6 +4,8 @@ import json
 from io import StringIO
 from math import cos, log, radians
 import os
+import shutil
+import subprocess
 
 import numpy as np
 import pandas as pd
@@ -1623,6 +1625,411 @@ def build_monthly_claim_comparison(
     return comparison[comparison_columns].sort_values(["year_month", "employee_id"]).reset_index(drop=True)
 
 
+def format_distance_summary(group: pd.DataFrame, name_col: str, distance_col: str, tag_col: str | None = None) -> str:
+    if group.empty or name_col not in group.columns:
+        return ""
+    work = group.copy()
+    work[name_col] = work[name_col].fillna("").astype(str).str.strip()
+    work = work.loc[work[name_col] != ""].copy()
+    if work.empty:
+        return ""
+    if distance_col in work.columns:
+        work[distance_col] = pd.to_numeric(work[distance_col], errors="coerce")
+        work = work.sort_values(distance_col, na_position="last")
+    subset = [name_col]
+    if tag_col and tag_col in work.columns:
+        subset.append(tag_col)
+    work = work.drop_duplicates(subset=subset, keep="first")
+    items: list[str] = []
+    for _, row in work.iterrows():
+        label = str(row[name_col]).strip()
+        if tag_col and tag_col in work.columns and pd.notna(row.get(tag_col)) and str(row.get(tag_col)).strip():
+            label = f"{label}（{str(row.get(tag_col)).strip()}）"
+        if distance_col in work.columns and pd.notna(row.get(distance_col)):
+            label = f"{label} · {int(round(float(row[distance_col])))} m"
+        items.append(label)
+    return "；".join(items)
+
+
+def json_safe_value(value):
+    if isinstance(value, pd.Timestamp):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if pd.isna(value):
+        return ""
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating,)):
+        return float(value)
+    if isinstance(value, (np.bool_,)):
+        return bool(value)
+    return value
+
+
+def dataframe_to_sheet_rows(dataframe: pd.DataFrame) -> list[list]:
+    rows = [list(dataframe.columns)]
+    for row in dataframe.itertuples(index=False, name=None):
+        rows.append([json_safe_value(value) for value in row])
+    return rows
+
+
+def reference_report_filename(start_date, end_date) -> str:
+    start_text = pd.Timestamp(start_date).strftime("%Y-%m-%d")
+    end_text = pd.Timestamp(end_date).strftime("%Y-%m-%d")
+    if pd.Timestamp(start_date).to_period("M") == pd.Timestamp(end_date).to_period("M"):
+        prefix = pd.Timestamp(start_date).strftime("%Y-%m")
+    else:
+        prefix = f"{start_text}_to_{end_text}"
+    return f"{prefix}_業務核定參考報表.xlsx"
+
+
+def find_node_executable() -> str:
+    candidates = [
+        Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "dependencies" / "node" / "bin" / "node.exe",
+        Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "dependencies" / "node" / "bin" / "node",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    fallback = shutil.which("node")
+    if fallback:
+        return fallback
+    raise FileNotFoundError("找不到可用的 Node.js 執行檔，無法產出 Excel 報表。")
+
+
+def ensure_artifact_tool_node_modules(base_dir: Path) -> None:
+    local_node_modules = base_dir / "node_modules"
+    if local_node_modules.exists():
+        return
+    bundled_node_modules = Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "dependencies" / "node" / "node_modules"
+    if not bundled_node_modules.exists():
+        raise FileNotFoundError("找不到 artifact-tool 所需的 node_modules。")
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(local_node_modules), str(bundled_node_modules)],
+        check=True,
+        cwd=base_dir,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+def build_google_sheet_reference_payload(
+    attendance: pd.DataFrame,
+    daily_metrics: pd.DataFrame,
+    routes: pd.DataFrame,
+    finance: pd.DataFrame,
+    raw_events: pd.DataFrame,
+    matches: pd.DataFrame,
+    employees: pd.DataFrame,
+    event_flags: pd.DataFrame,
+    monthly_claim_comparison: pd.DataFrame,
+    google_route_cache: pd.DataFrame,
+    config,
+    start_date,
+    end_date,
+) -> dict:
+    attendance_slice = attendance.loc[attendance["work_date"].dt.date.between(start_date, end_date)].copy()
+    if attendance_slice.empty:
+        raise ValueError("所選日期區間沒有可匯出的出勤資料。")
+
+    metrics_slice = daily_metrics.loc[
+        daily_metrics["attendance_uid"].isin(attendance_slice["attendance_uid"]),
+        ["attendance_uid", "raw_span_minutes", "effective_field_minutes", "anomaly_flag"],
+    ].copy()
+    route_slice = routes.loc[
+        routes["attendance_uid"].isin(attendance_slice["attendance_uid"]),
+        ["attendance_uid", "estimated_total_km", "estimated_business_km", "estimated_travel_min", "route_confidence"],
+    ].copy()
+    finance_slice = finance.loc[
+        finance["attendance_uid"].isin(attendance_slice["attendance_uid"]),
+        ["attendance_uid", "fuel_subsidy", "maintenance_subsidy", "per_diem_amount", "audit_light", "audit_status"],
+    ].copy()
+    flag_slice = event_flags.loc[
+        event_flags["attendance_uid"].isin(attendance_slice["attendance_uid"]),
+        [
+            "attendance_uid",
+            "missing_punch_unprocessed_count",
+            "missing_punch_processed_count",
+            "forget_punch_application_count",
+            "overtime_flag_bool",
+            "actual_overtime_flag",
+            "personal_overtime_flag",
+        ],
+    ].copy()
+
+    daily_export = attendance_slice.merge(metrics_slice, on="attendance_uid", how="left")
+    daily_export = daily_export.merge(route_slice, on="attendance_uid", how="left")
+    daily_export = daily_export.merge(finance_slice, on="attendance_uid", how="left")
+    daily_export = daily_export.merge(flag_slice, on="attendance_uid", how="left")
+    daily_export["year_month"] = daily_export["work_date"].dt.strftime("%Y-%m")
+    daily_export["出勤時段"] = daily_export.apply(
+        lambda row: (
+            f"{pd.to_datetime(row['first_actual_time'], errors='coerce'):%H:%M}-{pd.to_datetime(row['last_actual_time'], errors='coerce'):%H:%M}"
+            if pd.notna(pd.to_datetime(row["first_actual_time"], errors="coerce"))
+            and pd.notna(pd.to_datetime(row["last_actual_time"], errors="coerce"))
+            else ""
+        ),
+        axis=1,
+    )
+    daily_export["總出勤時數"] = pd.to_numeric(daily_export["raw_span_minutes"], errors="coerce").fillna(0) / 60
+    daily_export["有效外勤時數"] = pd.to_numeric(daily_export["effective_field_minutes"], errors="coerce").fillna(0) / 60
+
+    detail_events = raw_events.loc[raw_events["attendance_uid"].isin(attendance_slice["attendance_uid"])].copy()
+    selected_event_detail = (
+        matches.loc[matches["is_selected"] == 1, ["event_uid", "hospital_label", "beeline_meter", "selection_type"]]
+        .drop_duplicates(subset=["event_uid"], keep="first")
+        .rename(
+            columns={
+                "hospital_label": "selected_hospital_label_detail",
+                "beeline_meter": "selected_hospital_meter_detail",
+                "selection_type": "selected_hospital_type_detail",
+            }
+        )
+    )
+    detail_events = detail_events.merge(selected_event_detail, on="event_uid", how="left")
+
+    selected_matches_for_summary = matches.loc[
+        matches["attendance_uid"].isin(attendance_slice["attendance_uid"]) & (matches["is_selected"] == 1),
+        ["attendance_uid", "seq_no", "hospital_label", "beeline_meter", "selection_type"],
+    ].sort_values(["attendance_uid", "seq_no", "beeline_meter"])
+    selected_summary = (
+        selected_matches_for_summary.groupby("attendance_uid", dropna=False)[["hospital_label", "beeline_meter", "selection_type"]]
+        .apply(lambda group: format_distance_summary(group, "hospital_label", "beeline_meter", "selection_type"))
+        .reset_index(name="系統選定院所清單")
+    )
+    nearest_client_summary = (
+        detail_events.groupby("attendance_uid", dropna=False)[["nearest_client_name", "nearest_client_meter"]]
+        .apply(lambda group: format_distance_summary(group, "nearest_client_name", "nearest_client_meter"))
+        .reset_index(name="最近既有客戶清單")
+    )
+    nearest_hospital_summary = (
+        detail_events.groupby("attendance_uid", dropna=False)[["nearest_hospital_only_name", "nearest_hospital_only_meter"]]
+        .apply(lambda group: format_distance_summary(group, "nearest_hospital_only_name", "nearest_hospital_only_meter"))
+        .reset_index(name="最近醫院清單")
+    )
+    daily_export = daily_export.merge(selected_summary, on="attendance_uid", how="left")
+    daily_export = daily_export.merge(nearest_client_summary, on="attendance_uid", how="left")
+    daily_export = daily_export.merge(nearest_hospital_summary, on="attendance_uid", how="left")
+
+    employee_lookup = employees.drop_duplicates(subset=["employee_id"]).set_index("employee_id")
+    cache_slice = google_route_cache.loc[
+        google_route_cache["attendance_key"].isin(attendance_slice["attendance_key"])
+    ].copy() if isinstance(google_route_cache, pd.DataFrame) and not google_route_cache.empty else pd.DataFrame()
+    commute_rows: list[dict] = []
+    for row in daily_export.itertuples(index=False):
+        row_dict = row._asdict()
+        employee_row = employee_lookup.loc[row_dict["employee_id"]] if row_dict["employee_id"] in employee_lookup.index else None
+        day_events = detail_events.loc[detail_events["attendance_uid"] == row_dict["attendance_uid"]].copy()
+        day_google_segments = cache_slice.loc[cache_slice["attendance_key"] == row_dict.get("attendance_key")].copy() if not cache_slice.empty else pd.DataFrame()
+        commute_estimate = build_commute_estimate(pd.Series(row_dict), day_events, employee_row, day_google_segments, config)
+        commute_rows.append(
+            {
+                "attendance_uid": row_dict["attendance_uid"],
+                "預估通勤公里": round(float(commute_estimate["commute_km"]), 2),
+                "預估通勤時間(分)": round(float(commute_estimate["commute_min"]), 1),
+            }
+        )
+    daily_export = daily_export.merge(pd.DataFrame(commute_rows), on="attendance_uid", how="left")
+
+    month_claims = monthly_claim_comparison.loc[
+        monthly_claim_comparison["year_month"].isin(daily_export["year_month"].dropna().unique().tolist())
+    ][["employee_id", "year_month", "claimed_km", "difference_km", "difference_rate", "comparison_light"]].copy()
+    daily_export = daily_export.merge(month_claims, on=["employee_id", "year_month"], how="left")
+
+    daily_sheet = daily_export[
+        [
+            "year_month",
+            "work_date",
+            "employee_id",
+            "employee_name",
+            "employee_label",
+            "department",
+            "attendance_uid",
+            "出勤時段",
+            "event_count",
+            "gps_event_count",
+            "總出勤時數",
+            "有效外勤時數",
+            "estimated_total_km",
+            "estimated_business_km",
+            "預估通勤公里",
+            "預估通勤時間(分)",
+            "route_confidence",
+            "missing_punch_unprocessed_count",
+            "forget_punch_application_count",
+            "overtime_flag_bool",
+            "actual_overtime_flag",
+            "最近既有客戶清單",
+            "最近醫院清單",
+            "系統選定院所清單",
+            "claimed_km",
+            "difference_km",
+            "difference_rate",
+            "comparison_light",
+            "fuel_subsidy",
+            "maintenance_subsidy",
+            "per_diem_amount",
+            "audit_light",
+            "audit_status",
+        ]
+    ].rename(
+        columns={
+            "year_month": "月份",
+            "work_date": "日期",
+            "employee_id": "員工編號",
+            "employee_name": "員工姓名",
+            "employee_label": "員工",
+            "department": "部門",
+            "attendance_uid": "attendance_uid",
+            "event_count": "打卡次數",
+            "gps_event_count": "GPS點數",
+            "estimated_total_km": "預估總里程(km)",
+            "estimated_business_km": "預估公務里程(km)",
+            "route_confidence": "路徑信心",
+            "missing_punch_unprocessed_count": "未打卡未處理次數",
+            "forget_punch_application_count": "忘刷申請次數",
+            "overtime_flag_bool": "超時出勤",
+            "actual_overtime_flag": "實際加班",
+            "claimed_km": "實際月申請里程(km)",
+            "difference_km": "月申請-預估差異(km)",
+            "difference_rate": "月申請-預估差異率",
+            "comparison_light": "月比較燈號",
+            "fuel_subsidy": "參考油資補貼",
+            "maintenance_subsidy": "參考維修補貼",
+            "per_diem_amount": "參考日當費",
+            "audit_light": "財務燈號",
+            "audit_status": "財務狀態",
+        }
+    )
+    daily_sheet["日期"] = pd.to_datetime(daily_sheet["日期"], errors="coerce").dt.strftime("%Y-%m-%d")
+    for bool_col in ["超時出勤", "實際加班"]:
+        daily_sheet[bool_col] = daily_sheet[bool_col].fillna(False).map({True: "是", False: "否"})
+    daily_sheet["核定油費"] = ""
+    daily_sheet["核定日當費"] = ""
+    daily_sheet["核定狀態"] = ""
+    daily_sheet["核定備註"] = ""
+
+    monthly_summary = (
+        daily_sheet.groupby(["月份", "員工編號", "員工姓名", "員工", "部門"], dropna=False, as_index=False)
+        .agg(
+            出勤天數=("attendance_uid", "nunique"),
+            總打卡次數=("打卡次數", lambda s: int(pd.to_numeric(s, errors="coerce").fillna(0).sum())),
+            總GPS點數=("GPS點數", lambda s: int(pd.to_numeric(s, errors="coerce").fillna(0).sum())),
+            總出勤時數=("總出勤時數", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).sum(), 2)),
+            總有效外勤時數=("有效外勤時數", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).sum(), 2)),
+            預估總里程_km=("預估總里程(km)", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).sum(), 2)),
+            預估公務里程_km=("預估公務里程(km)", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).sum(), 2)),
+            預估通勤公里_km=("預估通勤公里", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).sum(), 2)),
+            預估通勤時間_分=("預估通勤時間(分)", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).sum(), 1)),
+            未打卡未處理次數=("未打卡未處理次數", lambda s: int(pd.to_numeric(s, errors="coerce").fillna(0).sum())),
+            忘刷申請次數=("忘刷申請次數", lambda s: int(pd.to_numeric(s, errors="coerce").fillna(0).sum())),
+            超時出勤天數=("超時出勤", lambda s: int((pd.Series(s).astype(str) == "是").sum())),
+            實際加班天數=("實際加班", lambda s: int((pd.Series(s).astype(str) == "是").sum())),
+            實際月申請里程_km=("實際月申請里程(km)", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).max(), 2)),
+            月申請減預估差異_km=("月申請-預估差異(km)", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).max(), 2)),
+            月申請減預估差異率=("月申請-預估差異率", lambda s: pd.to_numeric(s, errors="coerce").dropna().iloc[0] if not pd.to_numeric(s, errors="coerce").dropna().empty else np.nan),
+            月比較燈號=("月比較燈號", lambda s: next((value for value in s if pd.notna(value) and str(value).strip()), "")),
+            參考油資補貼=("參考油資補貼", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).sum(), 2)),
+            參考維修補貼=("參考維修補貼", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).sum(), 2)),
+            參考日當費=("參考日當費", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).sum(), 2)),
+        )
+        .sort_values(["月份", "員工編號"])
+    )
+    monthly_summary["核定油費"] = ""
+    monthly_summary["核定日當費"] = ""
+    monthly_summary["核定狀態"] = ""
+    monthly_summary["核定備註"] = ""
+
+    detail_sheet = detail_events[
+        [
+            "work_date",
+            "employee_id",
+            "employee_name",
+            "department",
+            "attendance_uid",
+            "actual_time_display",
+            "card_type",
+            "compare_result",
+            "source_type",
+            "exception_action",
+            "overtime_flag",
+            "overtime_reason",
+            "gps_lat",
+            "gps_lon",
+            "nearest_client_name",
+            "nearest_client_meter",
+            "nearest_hospital_only_name",
+            "nearest_hospital_only_meter",
+            "selected_hospital_label_detail",
+            "selected_hospital_meter_detail",
+            "selected_hospital_type_detail",
+        ]
+    ].rename(
+        columns={
+            "work_date": "日期",
+            "employee_id": "員工編號",
+            "employee_name": "員工姓名",
+            "department": "部門",
+            "attendance_uid": "attendance_uid",
+            "actual_time_display": "打卡時間",
+            "card_type": "卡別",
+            "compare_result": "比對結果",
+            "source_type": "來源",
+            "exception_action": "異常處理",
+            "overtime_flag": "超時出勤標記",
+            "overtime_reason": "超時出勤原因",
+            "gps_lat": "緯度",
+            "gps_lon": "經度",
+            "nearest_client_name": "最近既有客戶",
+            "nearest_client_meter": "最近既有客戶距離(m)",
+            "nearest_hospital_only_name": "最近醫院",
+            "nearest_hospital_only_meter": "最近醫院距離(m)",
+            "selected_hospital_label_detail": "系統選定院所",
+            "selected_hospital_meter_detail": "系統選定距離(m)",
+            "selected_hospital_type_detail": "系統選定類型",
+        }
+    )
+    detail_sheet["日期"] = pd.to_datetime(detail_sheet["日期"], errors="coerce").dt.strftime("%Y-%m-%d")
+
+    instruction_rows = [
+        ["工作表", "用途", "填寫說明"],
+        ["員工月度彙總", "給業務助理 / 財會快速查看每位員工每月估算里程與補貼總額。", "可填寫：核定油費、核定日當費、核定狀態、核定備註。"],
+        ["月度核定總表", "一列一筆員工單日出勤，供檢視每日里程、時數、預測拜訪院所。", "可依日期、員工、部門篩選，作為日當費 / 油費核定參考。"],
+        ["每日拜訪明細", "一列一個打卡點，供追查單點來源、最近既有客戶、最近醫院與系統選定。", "若需要覆核當天拜訪脈絡，可回看這張明細。"],
+        ["欄位說明", "系統選定院所 = 既有客戶優先，其次 1000m 內醫院，最後才是潛在院所。", "本報表僅供核定參考，實際核定結果仍以助理 / 財會填寫回傳為準。"],
+    ]
+
+    return {
+        "sheet_order": ["員工月度彙總", "月度核定總表", "每日拜訪明細", "填寫說明"],
+        "sheets": {
+            "員工月度彙總": dataframe_to_sheet_rows(monthly_summary),
+            "月度核定總表": dataframe_to_sheet_rows(daily_sheet),
+            "每日拜訪明細": dataframe_to_sheet_rows(detail_sheet),
+            "填寫說明": instruction_rows,
+        },
+    }
+
+
+def export_google_sheet_reference_report(payload: dict, output_path: Path) -> Path:
+    base_dir = Path(__file__).resolve().parent
+    ensure_artifact_tool_node_modules(base_dir)
+    builder_path = base_dir / "tools" / "build_google_sheet_report.mjs"
+    payload_path = output_path.with_suffix(".json")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    payload_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    subprocess.run(
+        [find_node_executable(), str(builder_path), str(payload_path), str(output_path)],
+        check=True,
+        cwd=base_dir,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    return output_path
+
+
 tables = load_results()
 config = tables["config"]
 attendance = tables["attendance"]
@@ -2350,6 +2757,47 @@ with tab_overview:
         mime="text/csv",
         width="stretch",
     )
+
+    st.markdown("**Google Sheet 友善版核定參考報表**")
+    st.caption("會產出一份可上傳到 Google Drive 並轉成 Google Sheet 的 Excel 檔，包含員工月度彙總、月度核定總表、每日拜訪明細與填寫說明。")
+    if st.button("產生核定參考報表 (.xlsx)", key="export_google_sheet_reference", width="stretch"):
+        try:
+            report_payload = build_google_sheet_reference_payload(
+                attendance=attendance,
+                daily_metrics=daily_metrics,
+                routes=routes,
+                finance=finance,
+                raw_events=raw_events,
+                matches=matches,
+                employees=employees,
+                event_flags=attendance_event_flags,
+                monthly_claim_comparison=monthly_claim_comparison,
+                google_route_cache=google_route_cache,
+                config=config,
+                start_date=overview_start_date,
+                end_date=overview_end_date,
+            )
+            reference_output_path = config.reports_dir / reference_report_filename(overview_start_date, overview_end_date)
+            export_google_sheet_reference_report(report_payload, reference_output_path)
+            st.session_state["reference_report_path"] = str(reference_output_path)
+            st.success(f"已產出核定參考報表：{reference_output_path.name}")
+        except Exception as exc:  # noqa: BLE001
+            st.error(str(exc))
+
+    reference_report_path_text = st.session_state.get("reference_report_path")
+    if reference_report_path_text:
+        reference_report_path = Path(reference_report_path_text)
+        if reference_report_path.exists():
+            export_cols = st.columns([1.4, 1.0])
+            export_cols[0].caption(f"報表路徑：`{reference_report_path}`")
+            export_cols[1].download_button(
+                "下載核定參考報表",
+                data=reference_report_path.read_bytes(),
+                file_name=reference_report_path.name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                width="stretch",
+                key="download_reference_report",
+            )
 
 with tab_routes_api:
     st.subheader("Google Routes API 手動執行")

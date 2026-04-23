@@ -1,0 +1,260 @@
+# 指標與資料來源說明
+
+本頁整理目前系統中主要指標、資料來源與計算邏輯，方便使用者理解畫面上的數據代表什麼。
+
+## 1. 原始資料來源
+
+### `20260422打卡資料匯出.xlsx`
+- 來源：104 打卡匯出檔
+- 用途：建立每日事件流、GPS 點位、上下班時間、異常標記
+- 主要欄位：
+  - `員工編號` / `姓名` / `部門`
+  - `工作日期`
+  - `應刷卡時間`
+  - `實際打卡時間`
+  - `卡別`
+  - `打卡地址`
+  - `比對結果`
+  - `來源`
+
+### `employees.csv`
+- 來源：員工主檔
+- 用途：顯示員工資訊、住家座標、通勤相關規則
+- 目前用到：
+  - `員工編號`
+  - `姓名`
+  - `Home_Lon`
+  - `Home_Lat`
+
+### `hospitals.csv`
+- 來源：醫療院所主檔
+- 用途：GPS 近鄰候選院所匹配
+- 目前用到：
+  - `機構代碼`
+  - `機構名稱`
+  - `Response_X`
+  - `Response_Y`
+
+### `existing_clients.csv`
+- 來源：既有客戶名單
+- 用途：標記候選院所是否為既有客戶
+
+### `monthly_claims.csv`
+- 來源：每月申請里程資料
+- 用途：財務稽核比對
+- 比對鍵值：
+  - `year_month`
+  - `employee_id`
+
+### `attendance_aux.csv`
+- 來源：補充制度資料
+- 用途：日當費與制度相關計算
+- 目前用到：
+  - `attendance_uid`
+  - `attendance_status`
+  - `daily_report_submitted`
+  - `meals_provided_count`
+
+## 2. 單日路徑檢視
+
+### 出勤時段
+- 資料來源：`attendance_day_group.first_actual_time` 到 `last_actual_time`
+- 說明：該日該員工最早與最晚的實際事件時間
+
+### 打卡 / GPS 點數
+- 資料來源：
+  - 打卡次數：`attendance_day_group.event_count`
+  - GPS 點數：`attendance_day_group.gps_event_count`
+
+### 預估總里程
+- 資料來源：`daily_route_summary.estimated_total_km`
+- 計算方式：
+  - 依當日 GPS 點位順序計算點對點直線距離
+  - 再乘上 `Detour Index`
+  - 若採 `hybrid_rule_based` 且員工有住家座標，會納入住家到首點、末點回住家的估算距離
+
+### 預估公務里程
+- 資料來源：`daily_route_summary.estimated_business_km`
+- 計算方式：
+  - 目前 v1 預設等於 `estimated_total_km`
+  - 若未來有 `base_commute_km` 與制度啟用，會扣除通勤基準後得到公務里程
+
+### 預估移動時間
+- 資料來源：`daily_route_summary.estimated_travel_min`
+- 計算方式：
+  - `estimated_total_km / average_speed_kmph * 60`
+
+### 路徑信心
+- 資料來源：`daily_route_summary.route_confidence`
+- 計算方式：
+  - 依當日匹配到的有效停留點比例計算
+  - 目前公式：`0.45 + matched_stop_count / total_stop_count * 0.55`
+  - 上限為 `1.0`
+
+### 最近院所
+- 資料來源：候選匹配結果 `route_stop_match`
+- 計算方式：
+  - 取該打卡點 `candidate_rank = 1` 的院所
+
+### 最近醫院
+- 資料來源：候選匹配結果 `route_stop_match`
+- 計算方式：
+  - 在候選院所中挑選名稱可判定為「醫院」的最近者
+  - 目前用名稱 heuristic 識別，例如包含：
+    - `醫院`
+    - `醫學中心`
+    - `榮總`
+  - 目前排除：
+    - `診所`
+    - `藥局`
+    - `衛生所`
+
+### 系統選定院所
+- 資料來源：`route_stop_match.is_selected = 1`
+- 計算方式：
+  - 由近鄰候選院所依距離與既有客戶加權後選出一筆
+
+### 前五可能拜訪院所
+- 資料來源：`route_stop_match`
+- 計算方式：
+  - 每個打卡點保留 KDTree 找出的前 5 個候選院所
+  - 會顯示距離與是否為既有客戶
+
+## 3. 個人期間報表
+
+期間報表支援：
+- 月報
+- 週報
+- 自訂日期區間
+
+### 出勤天數
+- 計算方式：期間內 `attendance_uid` 去重後的筆數
+
+### 總出勤時數
+- 資料來源：`bi_daily_metrics.raw_span_minutes`
+- 計算方式：
+  - 期間內 `raw_span_minutes` 加總後除以 60
+
+### 總有效外勤時數
+- 資料來源：`bi_daily_metrics.effective_field_minutes`
+- 計算方式：
+  - 期間內 `effective_field_minutes` 加總後除以 60
+
+### 總打卡次數
+- 資料來源：`attendance_day_group.event_count`
+- 計算方式：期間內加總
+
+### 總 GPS 點數
+- 資料來源：`attendance_day_group.gps_event_count`
+- 計算方式：期間內加總
+
+### 總計預估里程
+- 資料來源：`daily_route_summary.estimated_total_km`
+- 計算方式：期間內加總
+
+### 總計預估公務里程
+- 資料來源：`daily_route_summary.estimated_business_km`
+- 計算方式：期間內加總
+
+### 平均每日里程
+- 資料來源：`daily_route_summary.estimated_total_km`
+- 計算方式：期間平均值
+
+### 平均每日公務里程
+- 資料來源：`daily_route_summary.estimated_business_km`
+- 計算方式：期間平均值
+
+### 異常率
+- 資料來源：`bi_daily_metrics.anomaly_flag`
+- 計算方式：期間內異常日數 / 出勤日數
+
+### 超時出勤率
+- 資料來源：`attendance_day_group.compare_result_summary`
+- 計算方式：
+  - 若摘要中包含 `超時` 則視為超時出勤
+  - 期間內超時出勤日數 / 出勤日數
+
+### 匹配院所總次數
+- 資料來源：`daily_route_summary.matched_stop_count`
+- 計算方式：期間內加總
+
+### 最常拜訪院所
+- 資料來源：`route_stop_match`
+- 計算方式：
+  - 篩選 `is_selected = 1`
+  - 依院所名稱聚合統計拜訪次數
+
+## 4. 全業務總覽
+
+### 各業務總計預估里程比較
+- 資料來源：`daily_route_summary.estimated_total_km`
+- 計算方式：依員工於所選區間加總
+
+### 異常率 vs 超時出勤率
+- 資料來源：
+  - `bi_daily_metrics.anomaly_flag`
+  - `attendance_day_group.compare_result_summary`
+- 計算方式：
+  - 依員工於所選區間聚合
+
+### 出勤時數與 GPS 點數比較
+- 資料來源：
+  - `bi_daily_metrics.raw_span_minutes`
+  - `bi_daily_metrics.gps_event_count`
+
+### 財務補貼總覽
+- 資料來源：`finance_audit_result`
+- 顯示項目：
+  - `fuel_subsidy`
+  - `maintenance_subsidy`
+  - `per_diem_amount`
+
+## 5. 財務稽核
+
+### 月申請里程
+- 資料來源：`monthly_claims.csv`
+
+### 當日公務里程
+- 資料來源：`finance_audit_result.approved_business_km`
+
+### 燈號
+- 資料來源：`finance_audit_result.audit_light`
+- 計算方式：
+  - 先用 `year_month + employee_id` 聚合月申請里程
+  - 再與同月份的系統估算公務里程總和比較
+  - 規則：
+    - `green`：誤差 <= 15%
+    - `yellow`：15% < 誤差 <= 30%
+    - `red`：誤差 > 30%
+    - `gray`：缺申請值或資料不足
+
+### 油資補貼
+- 資料來源：`finance_audit_result.fuel_subsidy`
+- 計算方式：
+  - `approved_business_km * fuel_rate`
+
+### 維修補貼
+- 資料來源：`finance_audit_result.maintenance_subsidy`
+- 計算方式：
+  - `approved_business_km * maintenance_rate`
+
+### 日當費
+- 資料來源：`attendance_aux.csv`
+- 計算方式：
+  - `normal` 且有交日報且未供兩餐：`300`
+  - `half_day` 且未供餐：`150`
+  - 若供餐達門檻則為 `0`
+
+## 6. 參數設定頁
+
+目前顯示的設定來自 [settings.py](C:\Users\fordi\antigravity\Personal Project\IDE_new_workstyle_test\HR\function_route_report\settings.py)，包含：
+- 路徑模式
+- Detour Index
+- 平均時速
+- 候選院所數量
+- 信心距離閾值
+- 財務補貼費率
+- 休息時間
+- 燈號閾值
+
+目前為唯讀顯示頁，尚未支援 UI 直接修改後寫回設定檔。

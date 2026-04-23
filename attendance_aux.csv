@@ -1,0 +1,265 @@
+﻿attendance_uid,attendance_status,daily_report_submitted,meals_provided_count,remark
+HS02_2026-03-23_1_20260422打卡資料匯出,normal,False,2,mock normal scenario
+WS10_2026-03-23_10_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-04-01_100_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS08_2026-04-01_101_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS09_2026-04-01_102_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-04-01_103_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS11_2026-04-01_104_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS13_2026-04-01_105_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS14_2026-04-01_106_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-04-02_107_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-04-02_108_20260422打卡資料匯出,normal,True,1,mock normal scenario
+HS06_2026-04-02_109_20260422打卡資料匯出,normal,True,2,mock normal scenario
+WS11_2026-03-23_11_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS09_2026-04-02_110_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS11_2026-04-02_111_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS01_2026-04-02_112_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS05_2026-04-02_113_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS08_2026-04-02_114_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS09_2026-04-02_115_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-04-02_116_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-04-02_117_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+WS13_2026-04-02_118_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS14_2026-04-02_119_20260422打卡資料匯出,normal,True,2,mock normal scenario
+WS13_2026-03-23_12_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS02_2026-04-07_120_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-04-07_121_20260422打卡資料匯出,normal,True,1,mock normal scenario
+HS06_2026-04-07_122_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-04-07_123_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS11_2026-04-07_124_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS01_2026-04-07_125_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-04-07_126_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS08_2026-04-07_127_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS09_2026-04-07_128_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-04-07_129_20260422打卡資料匯出,normal,True,2,mock normal scenario
+WS14_2026-03-23_13_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-04-07_130_20260422打卡資料匯出,half_day,False,1,mock half day scenario
+WS13_2026-04-07_131_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS14_2026-04-07_132_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-04-08_133_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-04-08_134_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS06_2026-04-08_135_20260422打卡資料匯出,normal,True,1,mock normal scenario
+HS09_2026-04-08_136_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS11_2026-04-08_137_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS01_2026-04-08_138_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-04-08_139_20260422打卡資料匯出,normal,True,2,mock normal scenario
+HS02_2026-03-24_14_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+WS08_2026-04-08_140_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS09_2026-04-08_141_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS10_2026-04-08_142_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-04-08_143_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS13_2026-04-08_144_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+WS14_2026-04-08_145_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-04-09_146_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-04-09_147_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS06_2026-04-09_148_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-04-09_149_20260422打卡資料匯出,half_day,True,2,mock half day scenario
+HS03_2026-03-24_15_20260422打卡資料匯出,normal,False,0,mock normal scenario
+HS11_2026-04-09_150_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS01_2026-04-09_151_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-04-09_152_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS08_2026-04-09_153_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS09_2026-04-09_154_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-04-09_155_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-04-09_156_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS13_2026-04-09_157_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS14_2026-04-09_158_20260422打卡資料匯出,normal,True,1,mock normal scenario
+HS02_2026-04-10_159_20260422打卡資料匯出,half_day,True,2,mock half day scenario
+HS06_2026-03-24_16_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-04-10_160_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS06_2026-04-10_161_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-04-10_162_20260422打卡資料匯出,half_day,False,1,mock half day scenario
+HS11_2026-04-10_163_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS01_2026-04-10_164_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-04-10_165_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS08_2026-04-10_166_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS09_2026-04-10_167_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS10_2026-04-10_168_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-04-10_169_20260422打卡資料匯出,half_day,False,2,mock half day scenario
+HS09_2026-03-24_17_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS13_2026-04-10_170_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS14_2026-04-10_171_20260422打卡資料匯出,normal,True,1,mock normal scenario
+HS02_2026-04-13_172_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS03_2026-04-13_173_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS06_2026-04-13_174_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-04-13_175_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+HS11_2026-04-13_176_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+WS01_2026-04-13_177_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-04-13_178_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS08_2026-04-13_179_20260422打卡資料匯出,normal,True,2,mock normal scenario
+HS11_2026-03-24_18_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS09_2026-04-13_180_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS10_2026-04-13_181_20260422打卡資料匯出,normal,False,0,mock normal scenario
+WS11_2026-04-13_182_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS13_2026-04-13_183_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS14_2026-04-13_184_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-04-14_185_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+HS03_2026-04-14_186_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS06_2026-04-14_187_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-04-14_188_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+HS11_2026-04-14_189_20260422打卡資料匯出,normal,True,2,mock normal scenario
+WS01_2026-03-24_19_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS01_2026-04-14_190_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-04-14_191_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS08_2026-04-14_192_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS09_2026-04-14_193_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-04-14_194_20260422打卡資料匯出,normal,False,1,mock normal scenario
+WS11_2026-04-14_195_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS13_2026-04-14_196_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS14_2026-04-14_197_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-04-15_198_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-04-15_199_20260422打卡資料匯出,normal,True,2,mock normal scenario
+HS03_2026-03-23_2_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-03-24_20_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+HS06_2026-04-15_200_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-04-15_201_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS11_2026-04-15_202_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+WS01_2026-04-15_203_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-04-15_204_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS08_2026-04-15_205_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS09_2026-04-15_206_20260422打卡資料匯出,normal,False,0,mock normal scenario
+WS10_2026-04-15_207_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS11_2026-04-15_208_20260422打卡資料匯出,normal,True,2,mock normal scenario
+WS13_2026-04-15_209_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS08_2026-03-24_21_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS14_2026-04-15_210_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-04-16_211_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+HS03_2026-04-16_212_20260422打卡資料匯出,normal,False,0,mock normal scenario
+HS06_2026-04-16_213_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-04-16_214_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS11_2026-04-16_215_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS01_2026-04-16_216_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS05_2026-04-16_217_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS08_2026-04-16_218_20260422打卡資料匯出,normal,True,2,mock normal scenario
+WS09_2026-04-16_219_20260422打卡資料匯出,normal,False,0,mock normal scenario
+WS09_2026-03-24_22_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-04-16_220_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS11_2026-04-16_221_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS13_2026-04-16_222_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS14_2026-04-16_223_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-04-17_224_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-04-17_225_20260422打卡資料匯出,normal,False,1,mock normal scenario
+HS06_2026-04-17_226_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-04-17_227_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS11_2026-04-17_228_20260422打卡資料匯出,half_day,True,2,mock half day scenario
+WS01_2026-04-17_229_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-03-24_23_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS05_2026-04-17_230_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS08_2026-04-17_231_20260422打卡資料匯出,normal,False,0,mock normal scenario
+WS09_2026-04-17_232_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-04-17_233_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-04-17_234_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+WS13_2026-04-17_235_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS14_2026-04-17_236_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-04-20_237_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS03_2026-04-20_238_20260422打卡資料匯出,normal,False,2,mock normal scenario
+HS06_2026-04-20_239_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS11_2026-03-24_24_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS09_2026-04-20_240_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS11_2026-04-20_241_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS01_2026-04-20_242_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-04-20_243_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS08_2026-04-20_244_20260422打卡資料匯出,normal,False,0,mock normal scenario
+WS09_2026-04-20_245_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-04-20_246_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-04-20_247_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS13_2026-04-20_248_20260422打卡資料匯出,half_day,True,2,mock half day scenario
+WS14_2026-04-20_249_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS13_2026-03-24_25_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS15_2026-04-20_250_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+HS02_2026-04-21_251_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-04-21_252_20260422打卡資料匯出,normal,True,1,mock normal scenario
+HS06_2026-04-21_253_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-04-21_254_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS11_2026-04-21_255_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS01_2026-04-21_256_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-04-21_257_20260422打卡資料匯出,half_day,False,1,mock half day scenario
+WS08_2026-04-21_258_20260422打卡資料匯出,normal,True,2,mock normal scenario
+WS09_2026-04-21_259_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS14_2026-03-24_26_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-04-21_260_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS11_2026-04-21_261_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+WS13_2026-04-21_262_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS14_2026-04-21_263_20260422打卡資料匯出,normal,False,0,mock normal scenario
+WS15_2026-04-21_264_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-03-25_27_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-03-25_28_20260422打卡資料匯出,normal,True,1,mock normal scenario
+HS06_2026-03-25_29_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS06_2026-03-23_3_20260422打卡資料匯出,normal,True,2,mock normal scenario
+HS09_2026-03-25_30_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS11_2026-03-25_31_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS01_2026-03-25_32_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS05_2026-03-25_33_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS08_2026-03-25_34_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS09_2026-03-25_35_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-03-25_36_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-03-25_37_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+WS13_2026-03-25_38_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS14_2026-03-25_39_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-03-23_4_20260422打卡資料匯出,half_day,True,2,mock half day scenario
+HS02_2026-03-26_40_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-03-26_41_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+HS06_2026-03-26_42_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-03-26_43_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS11_2026-03-26_44_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS01_2026-03-26_45_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-03-26_46_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS08_2026-03-26_47_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS09_2026-03-26_48_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-03-26_49_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS11_2026-03-23_5_20260422打卡資料匯出,half_day,True,2,mock half day scenario
+WS11_2026-03-26_50_20260422打卡資料匯出,half_day,False,1,mock half day scenario
+WS13_2026-03-26_51_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS14_2026-03-26_52_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-03-27_53_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-03-27_54_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS06_2026-03-27_55_20260422打卡資料匯出,normal,True,1,mock normal scenario
+HS09_2026-03-27_56_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS11_2026-03-27_57_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS01_2026-03-27_58_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-03-27_59_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS01_2026-03-23_6_20260422打卡資料匯出,normal,True,2,mock normal scenario
+WS08_2026-03-27_60_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS09_2026-03-27_61_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS10_2026-03-27_62_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-03-27_63_20260422打卡資料匯出,half_day,False,0,mock half day scenario
+WS13_2026-03-27_64_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+WS14_2026-03-27_65_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS01_2026-03-28_66_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS09_2026-03-28_67_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS02_2026-03-30_68_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-03-30_69_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS05_2026-03-23_7_20260422打卡資料匯出,normal,False,2,mock normal scenario
+HS06_2026-03-30_70_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-03-30_71_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS11_2026-03-30_72_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS01_2026-03-30_73_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS05_2026-03-30_74_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS08_2026-03-30_75_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS09_2026-03-30_76_20260422打卡資料匯出,normal,False,0,mock normal scenario
+WS10_2026-03-30_77_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-03-30_78_20260422打卡資料匯出,half_day,True,1,mock half day scenario
+WS13_2026-03-30_79_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS08_2026-03-23_8_20260422打卡資料匯出,normal,True,2,mock normal scenario
+WS14_2026-03-30_80_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-03-31_81_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-03-31_82_20260422打卡資料匯出,normal,False,1,mock normal scenario
+HS06_2026-03-31_83_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS09_2026-03-31_84_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS11_2026-03-31_85_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS01_2026-03-31_86_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS05_2026-03-31_87_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS08_2026-03-31_88_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS09_2026-03-31_89_20260422打卡資料匯出,normal,False,0,mock normal scenario
+WS09_2026-03-23_9_20260422打卡資料匯出,normal,True,2,mock normal scenario
+WS10_2026-03-31_90_20260422打卡資料匯出,normal,True,0,mock normal scenario
+WS11_2026-03-31_91_20260422打卡資料匯出,normal,True,1,mock normal scenario
+WS13_2026-03-31_92_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS14_2026-03-31_93_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS02_2026-04-01_94_20260422打卡資料匯出,normal,True,0,mock normal scenario
+HS03_2026-04-01_95_20260422打卡資料匯出,normal,False,0,mock normal scenario
+HS06_2026-04-01_96_20260422打卡資料匯出,normal,True,1,mock normal scenario
+HS09_2026-04-01_97_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+HS11_2026-04-01_98_20260422打卡資料匯出,half_day,True,0,mock half day scenario
+WS01_2026-04-01_99_20260422打卡資料匯出,normal,True,0,mock normal scenario

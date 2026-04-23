@@ -298,6 +298,93 @@ def chunked(items: list[dict], size: int) -> list[list[dict]]:
     return [items[index : index + size] for index in range(0, len(items), size)]
 
 
+def build_attendance_event_flags(raw_events: pd.DataFrame) -> pd.DataFrame:
+    if raw_events.empty:
+        return pd.DataFrame(
+            columns=[
+                "attendance_uid",
+                "missing_punch_count",
+                "missing_punch_unprocessed_count",
+                "missing_punch_processed_count",
+                "missing_punch_unprocessed_flag",
+                "overtime_flag_bool",
+                "actual_overtime_flag",
+                "personal_overtime_flag",
+            ]
+        )
+
+    work = raw_events.copy()
+    work["compare_result"] = work["compare_result"].fillna("").astype(str).str.strip()
+    work["exception_action"] = work["exception_action"].fillna("").astype(str).str.strip()
+    work["overtime_flag"] = work["overtime_flag"].fillna("").astype(str).str.strip()
+    work["overtime_reason"] = work["overtime_reason"].fillna("").astype(str).str.strip()
+
+    work["missing_punch_flag"] = work["compare_result"].eq("未打卡")
+    work["missing_punch_unprocessed_flag"] = work["missing_punch_flag"] & work["exception_action"].eq("待處理")
+    work["missing_punch_processed_flag"] = work["missing_punch_flag"] & work["exception_action"].eq("已處理")
+    work["overtime_event_flag"] = work["overtime_flag"].eq("*")
+    work["actual_overtime_event_flag"] = work["overtime_event_flag"] & work["overtime_reason"].eq("實際加班")
+    work["personal_overtime_event_flag"] = work["overtime_event_flag"] & work["overtime_reason"].eq("個人因素")
+
+    grouped = (
+        work.groupby("attendance_uid", dropna=False)
+        .agg(
+            missing_punch_count=("missing_punch_flag", "sum"),
+            missing_punch_unprocessed_count=("missing_punch_unprocessed_flag", "sum"),
+            missing_punch_processed_count=("missing_punch_processed_flag", "sum"),
+            missing_punch_unprocessed_flag=("missing_punch_unprocessed_flag", "max"),
+            overtime_flag_bool=("overtime_event_flag", "max"),
+            actual_overtime_flag=("actual_overtime_event_flag", "max"),
+            personal_overtime_flag=("personal_overtime_event_flag", "max"),
+        )
+        .reset_index()
+    )
+    return grouped
+
+
+def build_commute_estimate(
+    attendance_row: pd.Series,
+    day_events: pd.DataFrame,
+    employee_row: pd.Series | None,
+    day_google_segments: pd.DataFrame,
+    config,
+) -> dict[str, float]:
+    result = {"commute_km": 0.0, "commute_min": 0.0}
+    if employee_row is None or day_events.empty:
+        return result
+    home_lat = employee_row.get("home_lat")
+    home_lon = employee_row.get("home_lon")
+    if pd.isna(home_lat) or pd.isna(home_lon):
+        return result
+
+    attendance_key = attendance_row.get("attendance_key")
+    segment_slice = day_google_segments.copy() if isinstance(day_google_segments, pd.DataFrame) else pd.DataFrame()
+    if not segment_slice.empty:
+        if "attendance_key" not in segment_slice.columns:
+            segment_slice["attendance_key"] = segment_slice["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
+        segment_slice = segment_slice.loc[segment_slice["attendance_key"] == attendance_key].copy()
+        if not segment_slice.empty and {"segment_type", "distance_meters", "duration_seconds"}.issubset(segment_slice.columns):
+            commute_segments = segment_slice.loc[segment_slice["segment_type"].isin(["home_to_first", "last_to_home"])].copy()
+            if not commute_segments.empty:
+                result["commute_km"] = float(commute_segments["distance_meters"].fillna(0).sum()) / 1000.0
+                result["commute_min"] = float(commute_segments["duration_seconds"].fillna(0).sum()) / 60.0
+                return result
+
+    gps_events = day_events.dropna(subset=["gps_lat", "gps_lon"]).sort_values(["actual_time", "source_row_no"])
+    if gps_events.empty:
+        return result
+
+    first_event = gps_events.iloc[0]
+    last_event = gps_events.iloc[-1]
+    first_leg_m = float(haversine_m(float(home_lat), float(home_lon), np.array([first_event["gps_lat"]]), np.array([first_event["gps_lon"]]))[0])
+    last_leg_m = float(haversine_m(float(last_event["gps_lat"]), float(last_event["gps_lon"]), np.array([home_lat]), np.array([home_lon]))[0])
+    commute_km = ((first_leg_m + last_leg_m) / 1000.0) * float(config.detour_index)
+    commute_min = (commute_km / max(float(config.average_speed_kmph), 1.0)) * 60.0
+    result["commute_km"] = commute_km
+    result["commute_min"] = commute_min
+    return result
+
+
 def build_google_routes_diagnostics(
     attendance_slice: pd.DataFrame,
     raw_events: pd.DataFrame,
@@ -1145,6 +1232,7 @@ def summarize_period(
     attendance: pd.DataFrame,
     daily_metrics: pd.DataFrame,
     routes: pd.DataFrame,
+    event_flags: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     attendance_mask = attendance["work_date"].dt.date.between(start_date, end_date)
     metrics_mask = daily_metrics["work_date"].dt.date.between(start_date, end_date)
@@ -1170,6 +1258,22 @@ def summarize_period(
             how="left",
         )
         .merge(
+            event_flags[
+                [
+                    "attendance_uid",
+                    "missing_punch_count",
+                    "missing_punch_unprocessed_count",
+                    "missing_punch_processed_count",
+                    "missing_punch_unprocessed_flag",
+                    "overtime_flag_bool",
+                    "actual_overtime_flag",
+                    "personal_overtime_flag",
+                ]
+            ],
+            on="attendance_uid",
+            how="left",
+        )
+        .merge(
             period_routes[
                 [
                     "attendance_uid",
@@ -1183,10 +1287,17 @@ def summarize_period(
             how="left",
         )
     )
-    merged["overtime_flag_bool"] = merged["compare_result_summary"].fillna("").astype(str).str.contains("超時")
     merged["employee_label"] = merged["employee_label"].fillna(
         merged.apply(lambda row: make_employee_label(row["employee_id"], row["employee_name"]), axis=1)
     )
+    for column in [
+        "missing_punch_count",
+        "missing_punch_unprocessed_count",
+        "missing_punch_processed_count",
+    ]:
+        merged[column] = pd.to_numeric(merged[column], errors="coerce").fillna(0).astype(int)
+    for column in ["missing_punch_unprocessed_flag", "overtime_flag_bool", "actual_overtime_flag", "personal_overtime_flag"]:
+        merged[column] = merged[column].fillna(False).astype(bool)
 
     summary = pd.DataFrame(
         [
@@ -1204,8 +1315,11 @@ def summarize_period(
                 "總計預估公務里程": round(merged["estimated_business_km"].fillna(0).sum(), 2),
                 "平均每日里程": round(merged["estimated_total_km"].fillna(0).mean(), 2),
                 "平均每日公務里程": round(merged["estimated_business_km"].fillna(0).mean(), 2),
+                "未打卡未處理次數": int(merged["missing_punch_unprocessed_count"].fillna(0).sum()),
+                "未打卡已處理次數": int(merged["missing_punch_processed_count"].fillna(0).sum()),
                 "異常率": round(float(merged["anomaly_flag"].fillna(False).mean()), 4),
                 "超時出勤率": round(float(merged["overtime_flag_bool"].fillna(False).mean()), 4),
+                "實際加班率": round(float(merged["actual_overtime_flag"].fillna(False).mean()), 4),
                 "總匹配院所次數": int(merged["matched_stop_count"].fillna(0).sum()),
             }
         ]
@@ -1224,6 +1338,11 @@ def summarize_period(
             "estimated_business_km",
             "estimated_travel_min",
             "matched_stop_count",
+            "missing_punch_unprocessed_count",
+            "missing_punch_processed_count",
+            "overtime_flag_bool",
+            "actual_overtime_flag",
+            "personal_overtime_flag",
             "compare_result_summary",
             "source_quality_status",
         ]
@@ -1241,6 +1360,11 @@ def summarize_period(
             "estimated_business_km": "預估公務里程",
             "estimated_travel_min": "預估移動分鐘",
             "matched_stop_count": "匹配院所數",
+            "missing_punch_unprocessed_count": "未打卡未處理次數",
+            "missing_punch_processed_count": "未打卡已處理次數",
+            "overtime_flag_bool": "超時出勤",
+            "actual_overtime_flag": "實際加班",
+            "personal_overtime_flag": "個人因素超時",
             "compare_result_summary": "異常摘要",
             "source_quality_status": "資料品質",
         }
@@ -1253,6 +1377,7 @@ def build_overview_summary(
     daily_metrics: pd.DataFrame,
     routes: pd.DataFrame,
     finance: pd.DataFrame,
+    event_flags: pd.DataFrame,
     start_date,
     end_date,
 ) -> pd.DataFrame:
@@ -1265,11 +1390,23 @@ def build_overview_summary(
     metrics = daily_metrics.loc[metrics_mask, ["attendance_uid", "raw_span_minutes", "effective_field_minutes", "anomaly_flag", "gps_event_count"]]
     route_slice = routes.loc[routes_mask, ["attendance_uid", "estimated_total_km", "estimated_business_km", "estimated_travel_min", "route_confidence"]]
     finance_slice = finance.loc[finance_mask, ["attendance_uid", "audit_light", "fuel_subsidy", "maintenance_subsidy", "per_diem_amount"]]
+    event_flag_slice = event_flags[
+        [
+            "attendance_uid",
+            "missing_punch_unprocessed_count",
+            "missing_punch_processed_count",
+            "overtime_flag_bool",
+            "actual_overtime_flag",
+            "personal_overtime_flag",
+        ]
+    ]
 
     merged = base.merge(metrics, on="attendance_uid", how="left", suffixes=("", "_metric"))
     merged = merged.merge(route_slice, on="attendance_uid", how="left")
     merged = merged.merge(finance_slice, on="attendance_uid", how="left")
-    merged["overtime_flag_bool"] = merged["compare_result_summary"].fillna("").astype(str).str.contains("超時")
+    merged = merged.merge(event_flag_slice, on="attendance_uid", how="left")
+    for column in ["overtime_flag_bool", "actual_overtime_flag", "personal_overtime_flag"]:
+        merged[column] = merged[column].fillna(False).astype(bool)
 
     summary = (
         merged.groupby(["employee_id", "employee_label", "department"], dropna=False)
@@ -1280,9 +1417,11 @@ def build_overview_summary(
             總打卡次數=("event_count", lambda s: int(s.fillna(0).sum())),
             總計預估里程=("estimated_total_km", lambda s: round(s.fillna(0).sum(), 2)),
             總計預估公務里程=("estimated_business_km", lambda s: round(s.fillna(0).sum(), 2)),
+            未打卡未處理次數=("missing_punch_unprocessed_count", lambda s: int(s.fillna(0).sum())),
             平均路徑信心=("route_confidence", lambda s: round(s.fillna(0).mean(), 4)),
             異常率=("anomaly_flag", lambda s: round(float(s.fillna(False).mean()), 4)),
             超時出勤率=("overtime_flag_bool", lambda s: round(float(s.fillna(False).mean()), 4)),
+            實際加班率=("actual_overtime_flag", lambda s: round(float(s.fillna(False).mean()), 4)),
             油資補貼=("fuel_subsidy", lambda s: round(s.fillna(0).sum(), 2)),
             維修補貼=("maintenance_subsidy", lambda s: round(s.fillna(0).sum(), 2)),
             日當費=("per_diem_amount", lambda s: round(s.fillna(0).sum(), 2)),
@@ -1311,6 +1450,7 @@ raw_events["employee_label"] = raw_events.apply(
     axis=1,
 )
 raw_events["actual_time_display"] = raw_events["actual_time"].dt.strftime("%Y-%m-%d %H:%M:%S").fillna("未提供")
+attendance_event_flags = build_attendance_event_flags(raw_events)
 routes["work_date"] = pd.to_datetime(routes["work_date"], errors="coerce")
 finance["work_date"] = pd.to_datetime(finance["work_date"], errors="coerce")
 
@@ -1427,22 +1567,31 @@ with tab_daily:
         unsafe_allow_html=True,
     )
 
-    summary_left, summary_mid, summary_right, summary_extra, summary_more = st.columns(5)
+    employee_row = employees.loc[employees["employee_id"] == selected_employee_id].head(1)
+    employee_row = employee_row.iloc[0] if not employee_row.empty else None
+
+    summary_left, summary_mid, summary_right, summary_extra, summary_more, summary_commute = st.columns(
+        [1.45, 1.05, 1.1, 1.1, 1.0, 1.15]
+    )
     if not day_route.empty and not day_attendance.empty:
         route_row = day_route.iloc[0]
         attendance_row = day_attendance.iloc[0]
-        summary_left.metric("出勤時段", f"{str(attendance_row['first_actual_time'])[11:16]} - {str(attendance_row['last_actual_time'])[11:16]}")
+        event_flag_row = attendance_event_flags.loc[attendance_event_flags["attendance_uid"] == attendance_row["attendance_uid"]].head(1)
+        event_flag_row = event_flag_row.iloc[0] if not event_flag_row.empty else None
+        commute_estimate = build_commute_estimate(attendance_row, day_events, employee_row, day_google_segments, config)
+        summary_left.metric("出勤時段", f"{str(attendance_row['first_actual_time'])[11:16]}-{str(attendance_row['last_actual_time'])[11:16]}")
         summary_mid.metric("打卡 / GPS 點數", f"{int(attendance_row['event_count'])} / {int(attendance_row['gps_event_count'])}")
         summary_right.metric("預估總里程", f"{route_row['estimated_total_km']:.2f} km")
         summary_extra.metric("公務里程", f"{route_row['estimated_business_km']:.2f} km")
         summary_more.metric("路徑信心", f"{route_row['route_confidence']:.2%}")
-        info_col1, info_col2, info_col3 = st.columns(3)
+        summary_commute.metric("預估通勤時間", f"{commute_estimate['commute_min']:.1f} 分")
+        info_col1, info_col2, info_col3, info_col4 = st.columns(4)
         info_col1.caption(f"異常摘要：{attendance_row['compare_result_summary'] if pd.notna(attendance_row['compare_result_summary']) else '無'}")
         info_col2.caption(f"預估移動時間：{route_row['estimated_travel_min']:.1f} 分")
         info_col3.caption(f"匹配院所數：{int(route_row['matched_stop_count'])} / {int(route_row['total_stop_count'])}")
+        unresolved_count = int(event_flag_row["missing_punch_unprocessed_count"]) if event_flag_row is not None else 0
+        info_col4.caption(f"未打卡未處理：{unresolved_count} 次")
 
-    employee_row = employees.loc[employees["employee_id"] == selected_employee_id].head(1)
-    employee_row = employee_row.iloc[0] if not employee_row.empty else None
     st.markdown("**地圖路徑**")
     st.markdown('<div class="daily-map-card">', unsafe_allow_html=True)
     st.plotly_chart(build_daily_map(day_events, employee_row, day_google_segments), width="stretch")
@@ -1573,7 +1722,7 @@ with tab_period:
             start_date = end_date = min_date
         selected_period = f"{start_date} ~ {end_date}"
 
-    summary_df, detail_df = summarize_period(period_employee_id, start_date, end_date, attendance, daily_metrics, routes)
+    summary_df, detail_df = summarize_period(period_employee_id, start_date, end_date, attendance, daily_metrics, routes, attendance_event_flags)
 
     if summary_df.empty:
         st.warning("目前選擇條件沒有對應資料。")
@@ -1589,9 +1738,11 @@ with tab_period:
         metric_row2[1].metric("總GPS點數", int(summary_row["總GPS點數"]))
         metric_row2[2].metric("總計預估里程", f"{summary_row['總計預估里程']:.2f} km")
         metric_row2[3].metric("總計預估公務里程", f"{summary_row['總計預估公務里程']:.2f} km")
-        metric_row3 = st.columns(2)
+        metric_row3 = st.columns(4)
         metric_row3[0].metric("平均每日里程", f"{summary_row['平均每日里程']:.2f} km")
         metric_row3[1].metric("平均每日公務里程", f"{summary_row['平均每日公務里程']:.2f} km")
+        metric_row3[2].metric("未打卡未處理次數", int(summary_row["未打卡未處理次數"]))
+        metric_row3[3].metric("實際加班率", f"{summary_row['實際加班率']:.2%}")
 
         st.markdown("**報表摘要**")
         summary_show = summary_df.rename(columns={"總匹配院所次數": "匹配院所總次數"})
@@ -1633,6 +1784,11 @@ with tab_period:
                     "總出勤分鐘": st.column_config.NumberColumn(format="%.1f"),
                     "有效外勤分鐘": st.column_config.NumberColumn(format="%.1f"),
                     "預估移動分鐘": st.column_config.NumberColumn(format="%.1f"),
+                    "未打卡未處理次數": st.column_config.NumberColumn(format="%d"),
+                    "未打卡已處理次數": st.column_config.NumberColumn(format="%d"),
+                    "超時出勤": st.column_config.CheckboxColumn(),
+                    "實際加班": st.column_config.CheckboxColumn(),
+                    "個人因素超時": st.column_config.CheckboxColumn(),
                 },
             )
 
@@ -1717,6 +1873,7 @@ with tab_overview:
         daily_metrics,
         routes,
         finance,
+        attendance_event_flags,
         overview_start_date,
         overview_end_date,
     )
@@ -1806,8 +1963,10 @@ with tab_overview:
             "總計預估里程": st.column_config.NumberColumn(format="%.2f km"),
             "總計預估公務里程": st.column_config.NumberColumn(format="%.2f km"),
             "平均路徑信心": st.column_config.NumberColumn(format="%.2f"),
+            "未打卡未處理次數": st.column_config.NumberColumn(format="%d"),
             "異常率": st.column_config.NumberColumn(format="%.2%"),
             "超時出勤率": st.column_config.NumberColumn(format="%.2%"),
+            "實際加班率": st.column_config.NumberColumn(format="%.2%"),
             "油資補貼": st.column_config.NumberColumn(format="%.2f"),
             "維修補貼": st.column_config.NumberColumn(format="%.2f"),
             "日當費": st.column_config.NumberColumn(format="%.2f"),

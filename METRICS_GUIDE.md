@@ -84,6 +84,14 @@
 - 計算方式：
   - `estimated_total_km / average_speed_kmph * 60`
 
+### 預估通勤時間
+- 資料來源：
+  - 優先使用 `google_route_cache` 中的 `home_to_first` 與 `last_to_home` 路段時間
+  - 若尚未執行 Google Routes，則用住家到首點、末點回住家的估算里程換算
+- 計算方式：
+  - `家 -> 第一個出勤地點` + `最後一個出勤地點 -> 家`
+  - 用來協助判讀當日總打卡時數偏少時，是否因為出勤地點較遠
+
 ### 路徑信心
 - 資料來源：`daily_route_summary.route_confidence`
 - 計算方式：
@@ -168,11 +176,28 @@
 - 資料來源：`bi_daily_metrics.anomaly_flag`
 - 計算方式：期間內異常日數 / 出勤日數
 
-### 超時出勤率
-- 資料來源：`attendance_day_group.compare_result_summary`
+### 未打卡未處理次數
+- 資料來源：`raw_check_events.compare_result`、`raw_check_events.exception_action`
 - 計算方式：
-  - 若摘要中包含 `超時` 則視為超時出勤
+  - 篩選 `compare_result = 未打卡`
+  - 且 `exception_action = 待處理`
+  - 以事件筆數加總
+- 用途：
+  - 作為考勤上「未打卡且尚未補請假單/公出單」的依據
+
+### 超時出勤率
+- 資料來源：`raw_check_events.overtime_flag`
+- 計算方式：
+  - 若該日任一事件的 `overtime_flag = *`
+  - 則該 `attendance_uid` 視為超時出勤日
   - 期間內超時出勤日數 / 出勤日數
+
+### 實際加班率
+- 資料來源：`raw_check_events.overtime_flag`、`raw_check_events.overtime_reason`
+- 計算方式：
+  - 若該日任一事件滿足 `overtime_flag = *` 且 `overtime_reason = 實際加班`
+  - 則該日視為實際加班日
+  - 期間內實際加班日數 / 出勤日數
 
 ### 匹配院所總次數
 - 資料來源：`daily_route_summary.matched_stop_count`
@@ -193,9 +218,14 @@
 ### 異常率 vs 超時出勤率
 - 資料來源：
   - `bi_daily_metrics.anomaly_flag`
-  - `attendance_day_group.compare_result_summary`
+  - `raw_check_events.overtime_flag`
 - 計算方式：
   - 依員工於所選區間聚合
+
+### 全業務未打卡未處理次數
+- 資料來源：`raw_check_events.compare_result`、`raw_check_events.exception_action`
+- 計算方式：
+  - 依員工於所選區間加總 `未打卡且待處理` 的事件筆數
 
 ### 出勤時數與 GPS 點數比較
 - 資料來源：

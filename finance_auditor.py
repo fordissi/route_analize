@@ -18,7 +18,7 @@ def _normalize_year_month(value) -> str | None:
     text = str(value).strip()
     if not text or text.lower() in {"nan", "none", "nat"}:
         return None
-    for fmt in ("%Y-%m", "%Y/%m", "%Y-%m-%d", "%Y/%m/%d", "%b-%y", "%b-%Y", "%Y%m", "%m/%Y"):
+    for fmt in ("%Y-%m", "%Y/%m", "%Y-%m-%d", "%Y/%m/%d", "%b-%y", "%y-%b", "%b-%Y", "%Y%m", "%m/%Y"):
         try:
             return pd.to_datetime(text, format=fmt).strftime("%Y-%m")
         except (TypeError, ValueError):

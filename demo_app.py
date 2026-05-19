@@ -1536,7 +1536,7 @@ def normalize_year_month_value(value) -> str | None:
     text = str(value).strip()
     if not text or text.lower() in {"nan", "none", "nat"}:
         return None
-    for fmt in ("%Y-%m", "%Y/%m", "%Y-%m-%d", "%Y/%m/%d", "%b-%y", "%b-%Y", "%Y%m", "%m/%Y"):
+    for fmt in ("%Y-%m", "%Y/%m", "%Y-%m-%d", "%Y/%m/%d", "%b-%y", "%y-%b", "%b-%Y", "%Y%m", "%m/%Y"):
         try:
             return pd.to_datetime(text, format=fmt).strftime("%Y-%m")
         except (TypeError, ValueError):
@@ -1625,6 +1625,34 @@ def build_monthly_claim_comparison(
 
     comparison["comparison_light"] = comparison.apply(classify, axis=1)
     return comparison[comparison_columns].sort_values(["year_month", "employee_id"]).reset_index(drop=True)
+
+
+def apply_live_monthly_claims_to_finance(
+    finance: pd.DataFrame,
+    monthly_claims: pd.DataFrame | None,
+) -> pd.DataFrame:
+    if finance.empty or monthly_claims is None or monthly_claims.empty:
+        return finance
+
+    claims = monthly_claims.copy()
+    claims["employee_id"] = claims["employee_id"].astype("string").str.strip()
+    claims["year_month"] = claims["year_month"].apply(normalize_year_month_value)
+    claims["claimed_km"] = pd.to_numeric(claims["claimed_km"], errors="coerce")
+    claims = (
+        claims.dropna(subset=["employee_id", "year_month", "claimed_km"])
+        .groupby(["employee_id", "year_month"], dropna=False, as_index=False)["claimed_km"]
+        .sum()
+    )
+    if claims.empty:
+        return finance
+
+    updated = finance.copy()
+    updated["employee_id"] = updated["employee_id"].astype("string").str.strip()
+    updated["year_month"] = pd.to_datetime(updated["work_date"], errors="coerce").dt.strftime("%Y-%m")
+    updated = updated.merge(claims, on=["employee_id", "year_month"], how="left")
+    updated["employee_claim_km"] = updated["claimed_km"].combine_first(updated.get("employee_claim_km"))
+    updated = updated.drop(columns=["claimed_km", "year_month"], errors="ignore")
+    return updated
 
 
 def format_distance_summary(group: pd.DataFrame, name_col: str, distance_col: str, tag_col: str | None = None) -> str:
@@ -2052,6 +2080,7 @@ monthly_claim_comparison = build_monthly_claim_comparison(
     green_threshold=float(config.light_green_pct),
     yellow_threshold=float(config.light_yellow_pct),
 )
+finance = apply_live_monthly_claims_to_finance(finance, monthly_claims)
 
 raw_events["employee_label"] = raw_events.apply(
     lambda row: make_employee_label(row["employee_id"], row["employee_name"]),

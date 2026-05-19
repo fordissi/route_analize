@@ -23,6 +23,9 @@ from google_routes_service import (
     load_google_route_cache,
     load_google_route_cache_detail,
     load_google_route_summary,
+    load_route_segment_exclusions,
+    rebuild_google_route_summary_from_cache,
+    upsert_route_segment_exclusions,
 )
 
 
@@ -148,6 +151,34 @@ st.markdown(
         padding: 0.45rem;
         box-shadow: 0 10px 24px rgba(15,23,42,0.05);
     }
+    .weekly-day-card {
+        background: rgba(255,255,255,0.98);
+        border: 1px solid rgba(15,23,42,0.08);
+        border-top: 4px solid #0f766e;
+        border-radius: 18px;
+        padding: 0.95rem 1rem;
+        min-height: 280px;
+        box-shadow: 0 10px 24px rgba(15,23,42,0.05);
+    }
+    .weekly-day-title {
+        font-weight: 700;
+        font-size: 1rem;
+        color: #0f172a;
+        margin-bottom: 0.25rem;
+    }
+    .weekly-day-sub {
+        color: #475569;
+        font-size: 0.9rem;
+        margin-bottom: 0.55rem;
+    }
+    .weekly-day-list {
+        margin: 0.3rem 0 0 0;
+        padding-left: 1rem;
+        color: #0f172a;
+    }
+    .weekly-day-list li {
+        margin-bottom: 0.35rem;
+    }
     .tag-client {
         display: inline-block;
         background: #fee2e2;
@@ -247,26 +278,390 @@ st.markdown(
         fill: #0f3d5e !important;
         color: #0f3d5e !important;
     }
+    .print-only {
+        display: none;
+    }
     @media print {
         @page {
-            size: A4 portrait;
-            margin: 12mm;
+            size: A4 landscape;
+            margin: 15mm;
         }
+
+        html,
+        body,
+        .stApp,
+        .main,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        [data-testid="stMainBlockContainer"] {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            background-image: none !important;
+            color: #000000 !important;
+            font-size: 9.5pt !important;
+            line-height: 1.35 !important;
+            box-shadow: none !important;
+            overflow: visible !important;
+        }
+
+        * {
+            color: #000000 !important;
+            text-shadow: none !important;
+            box-shadow: none !important;
+            box-sizing: border-box !important;
+        }
+
+        [data-testid="stSidebar"],
+        [data-testid="stHeader"],
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
+        [data-testid="stToastContainer"],
+        [data-testid="stModal"],
+        [data-testid="stPopover"],
+        [data-testid="stFileUploader"],
+        [data-testid="stDownloadButton"],
+        .app-title-block,
+        .hero-card,
+        .candidate-panel-header,
+        .candidate-card,
+        div[data-testid="stHorizontalBlock"]:has(.candidate-card),
+        .stButton,
+        button,
+        footer,
+        nav,
+        iframe[title="streamlit_navigation"],
+        .stTabs [data-baseweb="tab-list"],
+        div[data-testid="stMarkdown"]:has(h1),
+        div[data-testid="stMarkdown"]:has(h1) + div[data-testid="stMarkdown"],
+        div[data-testid="stSelectbox"],
+        div[data-baseweb="select"],
+        div[data-baseweb="input"],
+        div[data-testid="stDateInput"],
+        div[data-testid="stNumberInput"],
+        div[data-testid="stTextInput"],
+        div[data-testid="stCheckbox"] {
+            display: none !important;
+        }
+
+        .block-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            padding: 0 !important;
+        }
+
+        h1,
+        h2,
+        h3,
+        .stMarkdown h1,
+        .stMarkdown h2,
+        .stMarkdown h3 {
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+            color: #000000 !important;
+            line-height: 1.25 !important;
+            margin: 0 0 5pt 0 !important;
+        }
+
+        h1,
+        .stMarkdown h1 {
+            font-size: 15pt !important;
+        }
+
+        h2,
+        .stMarkdown h2 {
+            font-size: 12.5pt !important;
+        }
+
+        h3,
+        .stMarkdown h3 {
+            font-size: 11pt !important;
+        }
+
+        p,
+        li,
+        label,
+        .stMarkdown,
+        .stCaption,
+        .stText,
+        [data-testid="stMetricLabel"],
+        [data-testid="stMetricValue"] {
+            font-size: 9.5pt !important;
+            line-height: 1.35 !important;
+            color: #000000 !important;
+            word-break: keep-all !important;
+            overflow-wrap: break-word !important;
+        }
+
+        a[href]::after {
+            content: " (" attr(href) ")";
+            font-size: 9pt;
+            word-break: break-all;
+        }
+
+        .block-container,
+        div[data-testid="stColumn"],
+        div[data-testid="stVerticalBlock"],
+        div[data-testid="stHorizontalBlock"],
+        div[data-testid="stElementContainer"] {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            overflow: visible !important;
+        }
+
+        div[data-testid="stHorizontalBlock"] {
+            display: block !important;
+            width: 100% !important;
+            clear: both !important;
+            margin: 0 0 4pt 0 !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]::after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+
+        div[data-testid="stColumn"] {
+            display: block !important;
+            float: left !important;
+            flex: none !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            margin: 0 0 6pt 0 !important;
+            padding: 0 !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(2):last-child) > div[data-testid="stColumn"] {
+            width: 48.5% !important;
+            max-width: 48.5% !important;
+            margin-right: 1% !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(3):last-child) > div[data-testid="stColumn"] {
+            width: 31.5% !important;
+            max-width: 31.5% !important;
+            margin-right: 1% !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4):last-child) > div[data-testid="stColumn"] {
+            width: 23.75% !important;
+            max-width: 23.75% !important;
+            margin-right: 1% !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(5):last-child) > div[data-testid="stColumn"] {
+            width: 18.75% !important;
+            max-width: 18.75% !important;
+            margin-right: 1% !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(6):last-child) > div[data-testid="stColumn"] {
+            width: 15.75% !important;
+            max-width: 15.75% !important;
+            margin-right: 1% !important;
+        }
+
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:last-child {
+            margin-right: 0 !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has([data-testid="stPlotlyChart"]),
+        div[data-testid="stHorizontalBlock"]:has(.weekly-day-card),
+        div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.candidate-card),
+        .candidate-card {
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.candidate-card) ~ .print-only {
+            break-before: page !important;
+            page-break-before: always !important;
+        }
+
         .hero-card,
         .candidate-card,
         .candidate-panel-header,
         .section-card,
         .daily-map-card,
+        .weekly-day-card,
         div[data-testid="stMetric"],
-        div[data-testid="stDataFrame"] {
-            break-inside: avoid;
-            page-break-inside: avoid;
-            box-shadow: none !important;
+        div[data-testid="stDataFrame"],
+        div[data-testid="stTable"] {
+            width: 100% !important;
+            max-width: 100% !important;
+            background: #ffffff !important;
+            border: 1pt solid #000000 !important;
+            border-radius: 0 !important;
+            padding: 4pt !important;
+            margin: 0 0 5pt 0 !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            overflow: visible !important;
+            word-break: keep-all !important;
+            overflow-wrap: break-word !important;
         }
-        .block-container {
-            max-width: none;
-            padding-top: 0;
-            padding-bottom: 0;
+
+        [data-testid="stPlotlyChart"],
+        .js-plotly-plot {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 100mm !important;
+            max-height: none !important;
+            background: inherit !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+            margin: 0 0 6pt 0 !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            overflow: visible !important;
+            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
+        }
+
+        .daily-map-card {
+            width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            border: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+
+        .daily-map-card:empty {
+            display: none !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        h3 + div[data-testid="stElementContainer"] + div[data-testid="stElementContainer"] [data-testid="stPlotlyChart"],
+        h3 + div[data-testid="stElementContainer"] + div[data-testid="stElementContainer"] .js-plotly-plot {
+            height: 100mm !important;
+            max-height: none !important;
+        }
+
+        [data-testid="stPlotlyChart"]:has(.maplibregl-map),
+        [data-testid="stPlotlyChart"]:has(.maplibregl-map) .js-plotly-plot,
+        [data-testid="stPlotlyChart"]:has(.maplibregl-map) .plot-container,
+        [data-testid="stPlotlyChart"]:has(.maplibregl-map) .svg-container,
+        [data-testid="stPlotlyChart"]:has(.maplibregl-map) .main-svg {
+            height: 115mm !important;
+            max-height: none !important;
+        }
+
+        [data-testid="stPlotlyChart"]:has(.maplibregl-map) .maplibregl-map,
+        [data-testid="stPlotlyChart"]:has(.maplibregl-map) .maplibregl-canvas {
+            height: calc(115mm - 10px) !important;
+        }
+
+        div[data-testid="stMetric"] {
+            min-height: 0 !important;
+            padding: 3pt 4pt !important;
+        }
+
+        [data-testid="stMetricValue"] {
+            font-size: 10.5pt !important;
+            line-height: 1.2 !important;
+            word-break: keep-all !important;
+            overflow-wrap: break-word !important;
+        }
+
+        .tag-client,
+        .tag-potential,
+        .tag-hospital {
+            background: #ffffff !important;
+            border: 0.5pt solid #000000 !important;
+            color: #000000 !important;
+        }
+
+        div[data-testid="stDataFrame"],
+        div[data-testid="stDataFrame"] *,
+        div[data-testid="stTable"],
+        div[data-testid="stTable"] * {
+            display: none !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }
+
+        .print-only {
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 0 12pt 0 !important;
+            overflow: visible !important;
+            clear: both !important;
+        }
+
+        table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            table-layout: fixed !important;
+            font-size: 8pt !important;
+            line-height: 1.25 !important;
+            page-break-inside: auto !important;
+            clear: both !important;
+        }
+
+        thead {
+            display: table-header-group !important;
+        }
+
+        tfoot {
+            display: table-footer-group !important;
+        }
+
+        tr,
+        th,
+        td,
+        .weekly-day-card,
+        .section-card,
+        div[data-testid="stMetric"] {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+
+        th,
+        td {
+            border: 0.5pt solid #000000 !important;
+            padding: 2px 4px !important;
+            vertical-align: top !important;
+            white-space: nowrap !important;
+            word-break: keep-all !important;
+            overflow-wrap: normal !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+        }
+
+        .plot-container,
+        .svg-container,
+        .main-svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
+        }
+
+        .modebar,
+        .plotly-notifier {
+            display: none !important;
         }
     }
     </style>
@@ -279,6 +674,16 @@ def to_csv_bytes(dataframe: pd.DataFrame) -> bytes:
     buffer = StringIO()
     dataframe.to_csv(buffer, index=False, encoding="utf-8-sig")
     return buffer.getvalue().encode("utf-8-sig")
+
+
+def render_print_table(dataframe: pd.DataFrame, columns: list[str] | None = None) -> None:
+    if dataframe.empty:
+        return
+    print_view = dataframe.copy()
+    if columns is not None:
+        print_view = print_view[[column for column in columns if column in print_view.columns]].copy()
+    html = print_view.to_html(index=False, escape=True, border=0)
+    st.markdown(f'<div class="print-only">{html}</div>', unsafe_allow_html=True)
 
 
 def compute_zoom(latitudes: list[float], longitudes: list[float]) -> float:
@@ -851,23 +1256,26 @@ def load_results():
     google_route_summary = load_google_route_summary(config.sqlite_path)
     google_route_cache = load_google_route_cache(config.sqlite_path)
     google_route_cache_detail = load_google_route_cache_detail(config.sqlite_path)
+    route_segment_exclusions = load_route_segment_exclusions(config.sqlite_path)
     if not google_route_summary.empty:
         if "attendance_key" not in google_route_summary.columns:
             google_route_summary["attendance_key"] = google_route_summary["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
+        google_columns = [
+            "attendance_key",
+            "route_mode",
+            "estimated_total_km",
+            "estimated_business_km",
+            "estimated_travel_min",
+            "route_start_type",
+            "route_end_type",
+            "route_confidence",
+            "route_notes",
+        ]
+        for optional_column in ["raw_estimated_total_km", "excluded_km"]:
+            if optional_column in google_route_summary.columns:
+                google_columns.append(optional_column)
         routes = routes.merge(
-            google_route_summary[
-                [
-                    "attendance_key",
-                    "route_mode",
-                    "estimated_total_km",
-                    "estimated_business_km",
-                    "estimated_travel_min",
-                    "route_start_type",
-                    "route_end_type",
-                    "route_confidence",
-                    "route_notes",
-                ]
-            ].rename(
+            google_route_summary[google_columns].rename(
                 columns={
                     "route_mode": "google_route_mode",
                     "estimated_total_km": "google_estimated_total_km",
@@ -877,6 +1285,8 @@ def load_results():
                     "route_end_type": "google_route_end_type",
                     "route_confidence": "google_route_confidence",
                     "route_notes": "google_route_notes",
+                    "raw_estimated_total_km": "google_raw_estimated_total_km",
+                    "excluded_km": "google_excluded_km",
                 }
             ),
             on="attendance_key",
@@ -891,8 +1301,14 @@ def load_results():
             ("route_end_type", "google_route_end_type"),
             ("route_confidence", "google_route_confidence"),
             ("route_notes", "google_route_notes"),
+            ("raw_estimated_total_km", "google_raw_estimated_total_km"),
+            ("excluded_km", "google_excluded_km"),
         ]:
-            routes[base_col] = routes[google_col].combine_first(routes[base_col])
+            if google_col in routes.columns:
+                if base_col in routes.columns:
+                    routes[base_col] = routes[google_col].combine_first(routes[base_col])
+                else:
+                    routes[base_col] = routes[google_col]
 
     hospital_lookup = hospitals[["hospital_id", "hospital_name", "address"]].copy()
     client_ids = set(clients["hospital_id"].astype(str))
@@ -946,6 +1362,7 @@ def load_results():
         "google_route_summary": google_route_summary,
         "google_route_cache": google_route_cache,
         "google_route_cache_detail": google_route_cache_detail,
+        "route_segment_exclusions": route_segment_exclusions,
     }
 
 
@@ -1183,6 +1600,369 @@ def build_daily_map(
             ),
         ),
         height=780,
+        margin=dict(l=0, r=0, t=10, b=0),
+        legend=dict(orientation="h", yanchor="bottom", y=0.01, xanchor="left", x=0.01),
+    )
+    return fig
+
+
+WEEKDAY_LABELS = {
+    0: "週一",
+    1: "週二",
+    2: "週三",
+    3: "週四",
+    4: "週五",
+    5: "週六",
+    6: "週日",
+}
+
+
+def get_weekday_label(value) -> str:
+    timestamp = pd.to_datetime(value, errors="coerce")
+    if pd.isna(timestamp):
+        return "未指定"
+    return WEEKDAY_LABELS.get(int(timestamp.weekday()), timestamp.strftime("%Y-%m-%d"))
+
+
+def build_weekly_point_label(work_date, seq_no: int) -> str:
+    timestamp = pd.to_datetime(work_date, errors="coerce")
+    weekday_no = int(timestamp.weekday()) + 1 if pd.notna(timestamp) else 0
+    return f"{weekday_no}.{seq_no}"
+
+
+def pick_nearest_place(day_events: pd.DataFrame, name_col: str, meter_col: str) -> dict[str, object] | None:
+    if day_events.empty or name_col not in day_events.columns or meter_col not in day_events.columns:
+        return None
+    subset = day_events[[name_col, meter_col, "actual_time", "source_row_no"]].copy()
+    subset[meter_col] = pd.to_numeric(subset[meter_col], errors="coerce")
+    subset = subset.loc[subset[name_col].notna() & subset[meter_col].notna()].sort_values(
+        [meter_col, "actual_time", "source_row_no"]
+    )
+    if subset.empty:
+        return None
+    row = subset.iloc[0]
+    return {"name": str(row[name_col]), "meter": float(row[meter_col])}
+
+
+def summarize_selected_stops(day_events: pd.DataFrame) -> list[dict[str, object]]:
+    if day_events.empty or "selected_hospital_name" not in day_events.columns:
+        return []
+    selected = day_events.loc[day_events["selected_hospital_name"].notna()].copy()
+    if selected.empty:
+        return []
+    selected["selected_client_tag"] = selected["selected_client_tag"].fillna("未標示")
+    summary = (
+        selected.groupby(["selected_hospital_name", "selected_client_tag"], dropna=False)
+        .size()
+        .reset_index(name="count")
+        .sort_values(["count", "selected_hospital_name"], ascending=[False, True])
+    )
+    return summary.rename(
+        columns={
+            "selected_hospital_name": "name",
+            "selected_client_tag": "tag",
+        }
+    ).to_dict("records")
+
+
+def build_weekly_summary_cards(week_events: pd.DataFrame, week_start) -> list[dict[str, object]]:
+    week_start_ts = pd.to_datetime(week_start, errors="coerce")
+    if pd.isna(week_start_ts):
+        return []
+
+    cards: list[dict[str, object]] = []
+    for day_offset in range(5):
+        current_date = (week_start_ts + pd.Timedelta(days=day_offset)).date()
+        day_events = week_events.loc[week_events["work_date"].dt.date == current_date].copy()
+        nearest_client = pick_nearest_place(day_events, "nearest_client_name", "nearest_client_meter")
+        nearest_hospital = pick_nearest_place(day_events, "nearest_hospital_only_name", "nearest_hospital_only_meter")
+        cards.append(
+            {
+                "date": current_date,
+                "label": get_weekday_label(current_date),
+                "event_count": int(len(day_events)),
+                "gps_event_count": int(day_events["gps_lat"].notna().sum()) if "gps_lat" in day_events.columns else 0,
+                "nearest_client": nearest_client,
+                "nearest_hospital": nearest_hospital,
+                "selected_stops": summarize_selected_stops(day_events),
+            }
+        )
+    return cards
+
+
+def render_weekly_summary_cards(cards: list[dict[str, object]]) -> None:
+    if not cards:
+        st.info("本週沒有可呈現的每日摘要。")
+        return
+
+    columns = st.columns(5)
+    for column, card in zip(columns, cards):
+        selected_items = card["selected_stops"]
+        if selected_items:
+            selected_html = "".join(
+                [
+                    (
+                        f"<li>{item['name']} x {int(item['count'])} "
+                        f"<span class=\"{'tag-client' if item['tag'] == '既有客戶' else 'tag-hospital' if item['tag'] == '醫院' else 'tag-potential'}\">"
+                        f"{item['tag']}</span></li>"
+                    )
+                    for item in selected_items
+                ]
+            )
+        else:
+            selected_html = "<li>本日無系統選定院所</li>"
+
+        nearest_client = card["nearest_client"]
+        nearest_client_text = (
+            f"{nearest_client['name']} 距 {nearest_client['meter']:.0f} m"
+            if nearest_client
+            else "本日無最近既有客戶"
+        )
+        nearest_hospital = card["nearest_hospital"]
+        nearest_hospital_text = (
+            f"{nearest_hospital['name']} 距 {nearest_hospital['meter']:.0f} m"
+            if nearest_hospital
+            else "本日無最近醫院"
+        )
+        html = f"""
+        <div class="weekly-day-card">
+            <div class="weekly-day-title">{card['label']}</div>
+            <div class="weekly-day-sub">{card['date']} | 打卡 {card['event_count']} 點 / GPS {card['gps_event_count']} 點</div>
+            <div class="candidate-sub">最近既有客戶：{nearest_client_text}</div>
+            <div class="candidate-sub">最近醫院：{nearest_hospital_text}</div>
+            <div class="candidate-sub">系統選定院所</div>
+            <ul class="weekly-day-list">{selected_html}</ul>
+        </div>
+        """
+        column.markdown(html, unsafe_allow_html=True)
+
+
+def build_weekly_map(
+    week_events: pd.DataFrame,
+    employee_row: pd.Series | None = None,
+    google_segments: pd.DataFrame | None = None,
+) -> go.Figure:
+    gps_events = week_events.dropna(subset=["gps_lat", "gps_lon"]).copy()
+    gps_events = gps_events.sort_values(["work_date", "actual_time", "source_row_no"])
+    fig = go.Figure()
+    if gps_events.empty:
+        fig.update_layout(height=780, margin=dict(l=0, r=0, t=30, b=0))
+        return fig
+
+    has_home = (
+        employee_row is not None
+        and pd.notna(employee_row.get("home_lat"))
+        and pd.notna(employee_row.get("home_lon"))
+    )
+    fit_latitudes = gps_events["gps_lat"].astype(float).tolist()
+    fit_longitudes = gps_events["gps_lon"].astype(float).tolist()
+    day_palette = {
+        0: "#0f766e",
+        1: "#2563eb",
+        2: "#dc2626",
+        3: "#f59e0b",
+        4: "#7c3aed",
+        5: "#0891b2",
+        6: "#be123c",
+    }
+
+    if has_home:
+        home_lat = float(employee_row["home_lat"])
+        home_lon = float(employee_row["home_lon"])
+        fit_latitudes.append(home_lat)
+        fit_longitudes.append(home_lon)
+        fig.add_trace(
+            go.Scattermap(
+                lat=[home_lat],
+                lon=[home_lon],
+                mode="markers+text",
+                text=["家"],
+                textposition="top center",
+                textfont=dict(size=14, color="#1e3a8a"),
+                marker=dict(size=20, color="#1d4ed8"),
+                hovertemplate="<b>員工住家</b><br>%{lat:.6f}, %{lon:.6f}<extra></extra>",
+                name="住家",
+            )
+        )
+
+    for work_date, day_group in gps_events.groupby(gps_events["work_date"].dt.date, sort=True):
+        day_group = day_group.sort_values(["actual_time", "source_row_no"]).copy()
+        day_ts = pd.to_datetime(work_date)
+        day_color = day_palette.get(int(day_ts.weekday()), "#0f766e")
+        day_label = get_weekday_label(work_date)
+
+        attendance_key_groups: list[tuple[object, pd.DataFrame]] = []
+        if "attendance_key" in day_group.columns and day_group["attendance_key"].notna().any():
+            attendance_key_groups = list(day_group.groupby("attendance_key", dropna=False, sort=False))
+        else:
+            attendance_key_groups = [(None, day_group)]
+
+        first_segment_for_day = True
+        for attendance_key, route_group in attendance_key_groups:
+            route_group = route_group.sort_values(["actual_time", "source_row_no"]).copy()
+            if route_group.empty:
+                continue
+
+            first_point = route_group.iloc[0]
+            last_point = route_group.iloc[-1]
+            fallback_segments: list[dict[str, object]] = []
+            segment_no = 1
+
+            if has_home:
+                fallback_segments.append(
+                    {
+                        "segment_no": segment_no,
+                        "segment_type": "home_to_first",
+                        "lat": [home_lat, float(first_point["gps_lat"])],
+                        "lon": [home_lon, float(first_point["gps_lon"])],
+                    }
+                )
+                segment_no += 1
+
+            gps_points = route_group[["gps_lat", "gps_lon"]].astype(float).to_dict("records")
+            for first_coords, second_coords in zip(gps_points, gps_points[1:]):
+                fallback_segments.append(
+                    {
+                        "segment_no": segment_no,
+                        "segment_type": "between_points",
+                        "lat": [first_coords["gps_lat"], second_coords["gps_lat"]],
+                        "lon": [first_coords["gps_lon"], second_coords["gps_lon"]],
+                    }
+                )
+                segment_no += 1
+
+            if has_home:
+                fallback_segments.append(
+                    {
+                        "segment_no": segment_no,
+                        "segment_type": "last_to_home",
+                        "lat": [float(last_point["gps_lat"]), home_lat],
+                        "lon": [float(last_point["gps_lon"]), home_lon],
+                    }
+                )
+
+            google_polyline_lookup: dict[tuple[int, str], list[tuple[float, float]]] = {}
+            segment_slice = google_segments.copy() if isinstance(google_segments, pd.DataFrame) else pd.DataFrame()
+            if attendance_key is not None and not segment_slice.empty:
+                if "attendance_key" not in segment_slice.columns:
+                    segment_slice["attendance_key"] = (
+                        segment_slice["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
+                    )
+                segment_slice = segment_slice.loc[segment_slice["attendance_key"] == attendance_key].copy()
+                for _, segment in segment_slice.sort_values("segment_no").iterrows():
+                    points = decode_polyline(segment.get("polyline"))
+                    if len(points) >= 2:
+                        google_polyline_lookup[(int(segment["segment_no"]), str(segment["segment_type"]))] = points
+
+            for segment in fallback_segments:
+                key = (int(segment["segment_no"]), str(segment["segment_type"]))
+                google_points = google_polyline_lookup.get(key)
+                trace_name = f"{day_label} 路徑"
+                if google_points:
+                    fit_latitudes.extend([point[0] for point in google_points])
+                    fit_longitudes.extend([point[1] for point in google_points])
+                    fig.add_trace(
+                        go.Scattermap(
+                            lat=[point[0] for point in google_points],
+                            lon=[point[1] for point in google_points],
+                            mode="lines",
+                            line=dict(width=4, color=day_color),
+                            opacity=0.88,
+                            hoverinfo="skip",
+                            name=trace_name,
+                            showlegend=first_segment_for_day,
+                        )
+                    )
+                else:
+                    fig.add_trace(
+                        go.Scattermap(
+                            lat=segment["lat"],
+                            lon=segment["lon"],
+                            mode="lines",
+                            line=dict(width=3, color=day_color),
+                            opacity=0.52,
+                            hoverinfo="skip",
+                            name=trace_name,
+                            showlegend=first_segment_for_day,
+                        )
+                    )
+                first_segment_for_day = False
+
+    marker_labels: list[str] = []
+    marker_colors: list[str] = []
+    marker_sizes: list[int] = []
+    customdata: list[list[object]] = []
+    for work_date, day_group in gps_events.groupby(gps_events["work_date"].dt.date, sort=True):
+        day_group = day_group.sort_values(["actual_time", "source_row_no"]).reset_index(drop=True)
+        day_color = day_palette.get(pd.to_datetime(work_date).weekday(), "#0f766e")
+        day_label = get_weekday_label(work_date)
+        for index, row in day_group.iterrows():
+            marker_labels.append(build_weekly_point_label(work_date, index + 1))
+            marker_colors.append(day_color)
+            marker_sizes.append(28 if index in (0, len(day_group) - 1) else 24)
+            customdata.append(
+                [
+                    day_label,
+                    row.actual_time_display if pd.notna(row.actual_time_display) else "未判定",
+                    row.selected_hospital_name if pd.notna(row.selected_hospital_name) else "未判定",
+                    row.selected_client_tag if pd.notna(row.selected_client_tag) else "未判定",
+                    build_weekly_point_label(work_date, index + 1),
+                ]
+            )
+
+    fig.add_trace(
+        go.Scattermap(
+            lat=gps_events["gps_lat"],
+            lon=gps_events["gps_lon"],
+            mode="markers+text",
+            text=marker_labels,
+            textposition="middle center",
+            textfont=dict(size=11, color="white"),
+            marker=dict(size=marker_sizes, color=marker_colors, opacity=0.96),
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "編號：%{customdata[4]}<br>"
+                "時間：%{customdata[1]}<br>"
+                "座標：%{lat:.6f}, %{lon:.6f}<br>"
+                "系統選定：%{customdata[2]}<br>"
+                "類型：%{customdata[3]}<extra></extra>"
+            ),
+            customdata=customdata,
+            name="週打卡點",
+        )
+    )
+
+    lat_span = max(fit_latitudes) - min(fit_latitudes)
+    lon_span = max(fit_longitudes) - min(fit_longitudes)
+    lat_padding = max(lat_span * 0.45, 0.008)
+    lon_padding = max(lon_span * 0.45, 0.008)
+    padded_lats = [min(fit_latitudes) - lat_padding, max(fit_latitudes) + lat_padding]
+    padded_lons = [min(fit_longitudes) - lon_padding, max(fit_longitudes) + lon_padding]
+
+    fig.add_trace(
+        go.Scattermap(
+            lat=padded_lats,
+            lon=padded_lons,
+            mode="markers",
+            marker=dict(size=1, opacity=0),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+
+    fig.update_layout(
+        map_style="open-street-map",
+        map=dict(
+            center=dict(lat=sum(padded_lats) / len(padded_lats), lon=sum(padded_lons) / len(padded_lons)),
+            zoom=max(compute_zoom(padded_lats, padded_lons) - 1.15, 2.2),
+            bounds=dict(
+                west=min(padded_lons),
+                east=max(padded_lons),
+                south=min(padded_lats),
+                north=max(padded_lats),
+            ),
+        ),
+        height=820,
         margin=dict(l=0, r=0, t=10, b=0),
         legend=dict(orientation="h", yanchor="bottom", y=0.01, xanchor="left", x=0.01),
     )
@@ -1534,7 +2314,7 @@ def normalize_year_month_value(value) -> str | None:
     text = str(value).strip()
     if not text or text.lower() in {"nan", "none", "nat"}:
         return None
-    for fmt in ("%Y-%m", "%Y/%m", "%Y-%m-%d", "%Y/%m/%d", "%b-%y", "%b-%Y", "%Y%m", "%m/%Y"):
+    for fmt in ("%Y-%m", "%Y/%m", "%Y-%m-%d", "%Y/%m/%d", "%b-%y", "%y-%b", "%b-%Y", "%Y%m", "%m/%Y"):
         try:
             return pd.to_datetime(text, format=fmt).strftime("%Y-%m")
         except (TypeError, ValueError):
@@ -1623,6 +2403,34 @@ def build_monthly_claim_comparison(
 
     comparison["comparison_light"] = comparison.apply(classify, axis=1)
     return comparison[comparison_columns].sort_values(["year_month", "employee_id"]).reset_index(drop=True)
+
+
+def apply_live_monthly_claims_to_finance(
+    finance: pd.DataFrame,
+    monthly_claims: pd.DataFrame | None,
+) -> pd.DataFrame:
+    if finance.empty or monthly_claims is None or monthly_claims.empty:
+        return finance
+
+    claims = monthly_claims.copy()
+    claims["employee_id"] = claims["employee_id"].astype("string").str.strip()
+    claims["year_month"] = claims["year_month"].apply(normalize_year_month_value)
+    claims["claimed_km"] = pd.to_numeric(claims["claimed_km"], errors="coerce")
+    claims = (
+        claims.dropna(subset=["employee_id", "year_month", "claimed_km"])
+        .groupby(["employee_id", "year_month"], dropna=False, as_index=False)["claimed_km"]
+        .sum()
+    )
+    if claims.empty:
+        return finance
+
+    updated = finance.copy()
+    updated["employee_id"] = updated["employee_id"].astype("string").str.strip()
+    updated["year_month"] = pd.to_datetime(updated["work_date"], errors="coerce").dt.strftime("%Y-%m")
+    updated = updated.merge(claims, on=["employee_id", "year_month"], how="left")
+    updated["employee_claim_km"] = updated["claimed_km"].combine_first(updated.get("employee_claim_km"))
+    updated = updated.drop(columns=["claimed_km", "year_month"], errors="ignore")
+    return updated
 
 
 def format_distance_summary(group: pd.DataFrame, name_col: str, distance_col: str, tag_col: str | None = None) -> str:
@@ -2042,6 +2850,7 @@ employees = tables["employees"]
 google_route_summary = tables["google_route_summary"]
 google_route_cache = tables["google_route_cache"]
 google_route_cache_detail = tables["google_route_cache_detail"]
+route_segment_exclusions = tables["route_segment_exclusions"]
 monthly_claims_path = Path(config.data_dir) / "monthly_claims.csv"
 monthly_claims = pd.read_csv(monthly_claims_path, encoding="utf-8-sig") if monthly_claims_path.exists() else pd.DataFrame()
 monthly_claim_comparison = build_monthly_claim_comparison(
@@ -2050,6 +2859,7 @@ monthly_claim_comparison = build_monthly_claim_comparison(
     green_threshold=float(config.light_green_pct),
     yellow_threshold=float(config.light_yellow_pct),
 )
+finance = apply_live_monthly_claims_to_finance(finance, monthly_claims)
 
 raw_events["employee_label"] = raw_events.apply(
     lambda row: make_employee_label(row["employee_id"], row["employee_name"]),
@@ -2068,8 +2878,15 @@ employee_options = (
 )
 employee_label_map = dict(zip(employee_options["employee_label"], employee_options["employee_id"]))
 
-st.title("Function Route Report")
-st.caption("以單日路徑檢視、個人期間報表與可匯出結果為核心的業務出勤分析介面")
+st.markdown(
+    """
+    <div class="app-title-block">
+        <h1>Function Route Report</h1>
+        <p>以單日路徑檢視、個人期間報表與可匯出結果為核心的業務出勤分析介面</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 st.markdown(
     """
     <div class="hero-card">
@@ -2090,8 +2907,8 @@ if rerun:
     st.cache_data.clear()
     st.rerun()
 
-tab_home, tab_daily, tab_period, tab_overview, tab_routes_api, tab_settings, tab_guide, tab_quality = st.tabs(
-    ["首頁流程", "單日路徑檢視", "個人期間報表", "全業務總覽", "Google Routes 執行", "參數設定", "指標說明", "資料品質與說明"]
+tab_home, tab_daily, tab_weekly, tab_period, tab_overview, tab_route_adjust, tab_routes_api, tab_settings, tab_guide, tab_quality = st.tabs(
+    ["首頁流程", "單日路徑檢視", "週路徑檢視", "個人期間報表", "全業務總覽", "路徑核算調整", "Google Routes 執行", "參數設定", "指標說明", "資料品質與說明"]
 )
 
 with tab_home:
@@ -2248,6 +3065,21 @@ with tab_daily:
     )
     detail_tab, finance_tab = st.tabs(["當日事件明細", "當日財務摘要"])
     with detail_tab:
+        render_print_table(
+            event_detail,
+            [
+                "時間",
+                "卡別",
+                "比對結果",
+                "來源",
+                "最近既有客戶",
+                "最近既有客戶距離(公尺)",
+                "最近醫院",
+                "最近醫院距離(公尺)",
+                "系統選定院所",
+                "客戶類型",
+            ],
+        )
         st.dataframe(
             event_detail,
             width="stretch",
@@ -2262,35 +3094,142 @@ with tab_daily:
         )
     with finance_tab:
         if not day_finance.empty:
+            day_finance_view = day_finance[
+                [
+                    "employee_label",
+                    "employee_claim_km",
+                    "approved_business_km",
+                    "audit_light",
+                    "fuel_subsidy",
+                    "maintenance_subsidy",
+                    "per_diem_amount",
+                    "audit_status",
+                ]
+            ].rename(
+                columns={
+                    "employee_label": "員工",
+                    "employee_claim_km": "月申請里程",
+                    "approved_business_km": "當日公務里程",
+                    "audit_light": "燈號",
+                    "fuel_subsidy": "油資補貼",
+                    "maintenance_subsidy": "維修補貼",
+                    "per_diem_amount": "日當費",
+                    "audit_status": "審核狀態",
+                }
+            )
+            render_print_table(day_finance_view)
             st.dataframe(
-                day_finance[
-                    [
-                        "employee_label",
-                        "employee_claim_km",
-                        "approved_business_km",
-                        "audit_light",
-                        "fuel_subsidy",
-                        "maintenance_subsidy",
-                        "per_diem_amount",
-                        "audit_status",
-                    ]
-                ].rename(
-                    columns={
-                        "employee_label": "員工",
-                        "employee_claim_km": "月申請里程",
-                        "approved_business_km": "當日公務里程",
-                        "audit_light": "燈號",
-                        "fuel_subsidy": "油資補貼",
-                        "maintenance_subsidy": "維修補貼",
-                        "per_diem_amount": "日當費",
-                        "audit_status": "審核狀態",
-                    }
-                ),
+                day_finance_view,
                 width="stretch",
                 hide_index=True,
             )
         else:
             st.info("這一天目前沒有財務摘要資料。")
+
+with tab_weekly:
+    st.subheader("週出勤路徑")
+    week_col1, week_col2, week_col3 = st.columns([1.65, 1.0, 1.35])
+    weekly_employee_label = week_col1.selectbox(
+        "選擇業務員",
+        options=employee_options["employee_label"].tolist(),
+        index=0,
+        key="weekly_employee",
+    )
+    weekly_employee_id = employee_label_map[weekly_employee_label]
+    weekly_employee_dates = (
+        attendance.loc[attendance["employee_id"] == weekly_employee_id, "work_date"]
+        .dropna()
+        .sort_values()
+    )
+    weekly_options = weekly_employee_dates.dt.strftime("%G-W%V").unique().tolist()
+    selected_week = (
+        week_col2.selectbox(
+            "選擇週次",
+            options=weekly_options,
+            index=len(weekly_options) - 1,
+            key="weekly_period",
+        )
+        if weekly_options
+        else None
+    )
+
+    if weekly_employee_dates.empty:
+        week_start = pd.Timestamp.today().date()
+        week_end = week_start
+        week_attendance = attendance.iloc[0:0].copy()
+        week_events = raw_events.iloc[0:0].copy()
+        week_routes = routes.iloc[0:0].copy()
+        week_google_segments = pd.DataFrame()
+    else:
+        selected_week_dates = weekly_employee_dates.loc[weekly_employee_dates.dt.strftime("%G-W%V") == selected_week]
+        week_anchor = selected_week_dates.min() if not selected_week_dates.empty else weekly_employee_dates.max()
+        week_start = (week_anchor - pd.Timedelta(days=int(week_anchor.weekday()))).date()
+        week_end = (pd.to_datetime(week_start) + pd.Timedelta(days=4)).date()
+
+        week_attendance = attendance.loc[
+            (attendance["employee_id"] == weekly_employee_id)
+            & attendance["work_date"].dt.date.between(week_start, week_end)
+        ].copy()
+        week_events = raw_events.loc[
+            (raw_events["employee_id"] == weekly_employee_id)
+            & raw_events["work_date"].dt.date.between(week_start, week_end)
+        ].copy()
+        if not week_attendance.empty:
+            week_events = week_events.merge(
+                week_attendance[["attendance_uid", "attendance_key"]].drop_duplicates(),
+                on="attendance_uid",
+                how="left",
+            )
+        week_routes = routes.loc[routes["attendance_uid"].isin(week_attendance["attendance_uid"])].copy()
+        if isinstance(google_route_cache, pd.DataFrame) and not google_route_cache.empty and not week_attendance.empty:
+            week_google_segments = google_route_cache.copy()
+            if "attendance_key" not in week_google_segments.columns:
+                week_google_segments["attendance_key"] = (
+                    week_google_segments["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
+                )
+            week_google_segments = week_google_segments.loc[
+                week_google_segments["attendance_key"].isin(week_attendance["attendance_key"])
+            ].copy()
+        else:
+            week_google_segments = pd.DataFrame()
+
+    week_col3.markdown(
+        f"""
+        <div class="section-card" style="padding:0.85rem 1rem;">
+            <div class="candidate-title">{weekly_employee_label}</div>
+            <div class="candidate-sub">{selected_week if weekly_options else '無可用週次'} | {week_start} ~ {week_end}</div>
+            <div class="candidate-sub">出勤 {int(week_attendance['attendance_uid'].nunique()) if not week_attendance.empty else 0} 天 / GPS {int(week_events['gps_lat'].notna().sum()) if isinstance(week_events, pd.DataFrame) and 'gps_lat' in week_events.columns else 0} 點</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    weekly_employee_row = employees.loc[employees["employee_id"] == weekly_employee_id].head(1)
+    weekly_employee_row = weekly_employee_row.iloc[0] if not weekly_employee_row.empty else None
+
+    week_metric1, week_metric2, week_metric3, week_metric4 = st.columns(4)
+    week_metric1.metric("出勤天數", int(week_attendance["attendance_uid"].nunique()) if not week_attendance.empty else 0)
+    week_metric2.metric(
+        "打卡 / GPS 點數",
+        f"{int(len(week_events)) if isinstance(week_events, pd.DataFrame) else 0} / {int(week_events['gps_lat'].notna().sum()) if isinstance(week_events, pd.DataFrame) and 'gps_lat' in week_events.columns else 0}",
+    )
+    week_metric3.metric(
+        "預估總里程",
+        f"{week_routes['estimated_total_km'].fillna(0).sum():.2f} km" if not week_routes.empty else "0.00 km",
+    )
+    week_metric4.metric(
+        "公務里程",
+        f"{week_routes['estimated_business_km'].fillna(0).sum():.2f} km" if not week_routes.empty else "0.00 km",
+    )
+
+    st.markdown("**週地圖路徑**")
+    st.markdown('<div class="daily-map-card">', unsafe_allow_html=True)
+    st.plotly_chart(build_weekly_map(week_events, weekly_employee_row, week_google_segments), width="stretch")
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("週版地圖以週一到週五整週呈現，打卡點編號採用「週次序號.當日點位序號」格式，例如 1.1 代表週一第一個點。")
+
+    st.markdown("**每日摘要卡**")
+    render_weekly_summary_cards(build_weekly_summary_cards(week_events, week_start))
 
 with tab_period:
     st.subheader("個人期間報表")
@@ -2364,6 +3303,7 @@ with tab_period:
 
         st.markdown("**報表摘要**")
         summary_show = summary_df.rename(columns={"總匹配院所次數": "匹配院所總次數"})
+        render_print_table(summary_show)
         st.dataframe(summary_show, width="stretch", hide_index=True)
 
         st.markdown("**月申請里程 vs 系統預估公務里程**")
@@ -2394,6 +3334,7 @@ with tab_period:
                     "comparison_light": "比較燈號",
                 }
             )
+            render_print_table(period_claim_table)
             st.dataframe(
                 period_claim_table,
                 width="stretch",
@@ -2428,9 +3369,25 @@ with tab_period:
         chart_col1, chart_col2 = st.columns([1, 1.25])
         with chart_col1:
             st.markdown("**最常拜訪院所**")
+            render_print_table(top_hospitals)
             st.dataframe(top_hospitals, width="stretch", hide_index=True)
         with chart_col2:
             st.markdown("**每日明細**")
+            render_print_table(
+                detail_df,
+                [
+                    "日期",
+                    "打卡次數",
+                    "GPS點數",
+                    "總出勤分鐘",
+                    "有效外勤分鐘",
+                    "預估總里程",
+                    "預估公務里程",
+                    "未打卡未處理次數",
+                    "忘刷申請次數",
+                    "比對摘要",
+                ],
+            )
             st.dataframe(
                 detail_df,
                 width="stretch",
@@ -2496,6 +3453,19 @@ with tab_period:
             }
         )
         st.markdown("**期間財務明細**")
+        render_print_table(
+            finance_detail,
+            [
+                "日期",
+                "月申請里程",
+                "當日公務里程",
+                "燈號",
+                "油資補貼",
+                "維修補貼",
+                "日當費",
+                "審核狀態",
+            ],
+        )
         st.dataframe(
             finance_detail,
             width="stretch",
@@ -2537,6 +3507,16 @@ with tab_overview:
         overview_end_date,
     )
     overview_months = months_in_range(overview_start_date, overview_end_date)
+    overview_start_ts = pd.Timestamp(overview_start_date)
+    overview_end_ts = pd.Timestamp(overview_end_date)
+    overview_period = overview_start_ts.to_period("M")
+    overview_month_dates = all_dates.loc[all_dates.dt.to_period("M") == overview_period]
+    overview_is_full_single_month = (
+        overview_period == overview_end_ts.to_period("M")
+        and not overview_month_dates.empty
+        and overview_start_date == overview_month_dates.min().date()
+        and overview_end_date == overview_month_dates.max().date()
+    )
     overview_claims = monthly_claim_comparison.loc[
         monthly_claim_comparison["year_month"].isin(overview_months)
     ].copy()
@@ -2551,6 +3531,7 @@ with tab_overview:
                 "差異里程",
                 "差異率",
                 "差異率絕對值",
+                "比較燈號",
             ]
         )
     else:
@@ -2560,11 +3541,14 @@ with tab_overview:
                 實際月申請里程=("claimed_km", lambda s: round(s.fillna(0).sum(), 2)),
                 系統預估月公務里程=("estimated_business_km", lambda s: round(s.fillna(0).sum(), 2)),
                 差異里程=("difference_km", lambda s: round(s.fillna(0).sum(), 2)),
+                比較燈號=("comparison_light", lambda s: next((value for value in s if pd.notna(value)), "gray")),
             )
         )
         denominator = overview_claim_employee["實際月申請里程"].where(overview_claim_employee["實際月申請里程"] > 0)
         overview_claim_employee["差異率"] = overview_claim_employee["差異里程"] / denominator
         overview_claim_employee["差異率絕對值"] = overview_claim_employee["差異率"].abs()
+        if not overview_is_full_single_month:
+            overview_claim_employee["比較燈號"] = "區間不判定"
         overview_claim_employee = overview_claim_employee.sort_values("差異率絕對值", ascending=False)
 
     overview_col2.metric("納入比較員工數", len(overview_summary))
@@ -2690,6 +3674,7 @@ with tab_overview:
     else:
         scatter_df = overview_claim_employee.copy()
         scatter_df["差異率絕對值"] = scatter_df["差異率絕對值"].fillna(0.0)
+        scatter_df["比較燈號"] = scatter_df["比較燈號"].fillna("gray")
         max_axis_value = float(
             max(
                 scatter_df["實際月申請里程"].fillna(0).max(),
@@ -2701,13 +3686,28 @@ with tab_overview:
             scatter_df,
             x="系統預估月公務里程",
             y="實際月申請里程",
-            color="department",
+            color="比較燈號",
+            color_discrete_map={
+                "green": "#16a34a",
+                "yellow": "#f59e0b",
+                "red": "#dc2626",
+                "gray": "#94a3b8",
+                "區間不判定": "#94a3b8",
+            },
+            category_orders={"比較燈號": ["green", "yellow", "red", "gray", "區間不判定"]},
             size="差異率絕對值",
             hover_name="employee_label",
+            hover_data={
+                "department": True,
+                "比較燈號": True,
+                "差異里程": ":.2f",
+                "差異率": ":.2%",
+            },
             labels={
                 "系統預估月公務里程": "系統預估月公務里程",
                 "實際月申請里程": "實際月申請里程",
                 "department": "部門",
+                "比較燈號": "比較燈號",
                 "差異率絕對值": "差異率絕對值",
             },
         )
@@ -2721,20 +3721,43 @@ with tab_overview:
         )
         fig_claim_scatter.update_layout(height=460, margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig_claim_scatter, width="stretch")
-        st.caption(
-            f"月申請里程比較燈號門檻沿用財務設定：綠燈差異率 <= {float(config.light_green_pct):.0%}，"
-            f"黃燈差異率 <= {float(config.light_yellow_pct):.0%}，超過則視為紅燈。差異率以實際月申請里程為分母。"
-        )
+        if overview_is_full_single_month:
+            st.caption(
+                f"月申請里程比較燈號門檻沿用財務設定：綠燈差異率 <= {float(config.light_green_pct):.0%}，"
+                f"黃燈差異率 <= {float(config.light_yellow_pct):.0%}，超過則視為紅燈。差異率以實際月申請里程為分母。"
+            )
+        else:
+            st.caption("燈號僅在選擇完整單月時套用；目前日期區間不是完整單月，散點圖以灰色呈現且不做燈號判定。")
 
     st.markdown("**全業務明細表**")
+    overview_summary_view = overview_summary.rename(
+        columns={
+            "employee_id": "員工編號",
+            "employee_label": "員工",
+            "department": "部門",
+        }
+    )
+    render_print_table(
+        overview_summary_view,
+        [
+            "員工編號",
+            "員工",
+            "部門",
+            "出勤天數",
+            "總打卡次數",
+            "總GPS點數",
+            "總計預估里程",
+            "總計預估公務里程",
+            "未打卡未處理次數",
+            "異常率",
+            "超時出勤率",
+            "油資補貼",
+            "維修補貼",
+            "日當費",
+        ],
+    )
     st.dataframe(
-        overview_summary.rename(
-            columns={
-                "employee_id": "員工編號",
-                "employee_label": "員工",
-                "department": "部門",
-            }
-        ),
+        overview_summary_view,
         width="stretch",
         hide_index=True,
         column_config={
@@ -2798,6 +3821,156 @@ with tab_overview:
                 width="stretch",
                 key="download_reference_report",
             )
+
+with tab_route_adjust:
+    st.subheader("路徑核算調整")
+    st.caption("勾選不應計入自駕里程的 Google Routes 路段；原始路徑距離會保留，報表與財務核算改用排除後里程。")
+    if not isinstance(google_route_cache, pd.DataFrame) or google_route_cache.empty:
+        st.info("目前沒有 Google Routes 路段快取。請先到「Google Routes 執行」頁面產生路徑資料。")
+    else:
+        adjust_col1, adjust_col2 = st.columns([1.4, 1.2])
+        adjust_employee_options = ["全部員工", *employee_options["employee_label"].tolist()]
+        adjust_employee_label = adjust_col1.selectbox(
+            "員工",
+            options=adjust_employee_options,
+            key="route_adjust_employee",
+        )
+        adjust_dates = attendance["work_date"].dropna().sort_values()
+        adjust_default_start = adjust_dates.min().date()
+        adjust_default_end = adjust_dates.max().date()
+        adjust_range = adjust_col2.date_input(
+            "日期區間",
+            value=(adjust_default_start, adjust_default_end),
+            min_value=adjust_default_start,
+            max_value=adjust_default_end,
+            key="route_adjust_range",
+        )
+        if isinstance(adjust_range, tuple) and len(adjust_range) == 2:
+            adjust_start_date, adjust_end_date = adjust_range
+        else:
+            adjust_start_date = adjust_end_date = adjust_default_start
+
+        adjust_attendance = attendance.loc[
+            attendance["work_date"].dt.date.between(adjust_start_date, adjust_end_date)
+        ].copy()
+        if adjust_employee_label != "全部員工":
+            adjust_employee_id = employee_label_map[adjust_employee_label]
+            adjust_attendance = adjust_attendance.loc[adjust_attendance["employee_id"] == adjust_employee_id].copy()
+
+        segment_view = google_route_cache.copy()
+        if "attendance_key" not in segment_view.columns:
+            segment_view["attendance_key"] = segment_view["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
+        segment_view = segment_view.loc[
+            segment_view["attendance_key"].isin(adjust_attendance["attendance_key"])
+        ].copy()
+
+        if segment_view.empty:
+            st.info("所選條件沒有可調整的 Google Routes 路段。")
+        else:
+            exclusion_view = route_segment_exclusions.copy() if isinstance(route_segment_exclusions, pd.DataFrame) else pd.DataFrame()
+            if exclusion_view.empty:
+                exclusion_view = pd.DataFrame(columns=["cache_key", "exclude_reason", "exclude_note", "updated_by", "updated_at"])
+            segment_view = segment_view.merge(
+                exclusion_view[["cache_key", "exclude_reason", "exclude_note", "updated_by", "updated_at"]].drop_duplicates("cache_key"),
+                on="cache_key",
+                how="left",
+            )
+            segment_view = segment_view.merge(
+                adjust_attendance[["attendance_key", "employee_label", "employee_id", "work_date"]],
+                on="attendance_key",
+                how="left",
+            )
+            segment_view["work_date"] = pd.to_datetime(segment_view["work_date"], errors="coerce").dt.strftime("%Y-%m-%d")
+            segment_view["不計入預估里程"] = segment_view["exclude_reason"].notna()
+            segment_view["路段"] = segment_view["segment_type"].map(
+                {
+                    "home_to_first": "住家到第一點",
+                    "between_points": "打卡點之間",
+                    "last_to_home": "最後一點回住家",
+                }
+            ).fillna(segment_view["segment_type"])
+            segment_view["距離(km)"] = pd.to_numeric(segment_view["distance_meters"], errors="coerce").fillna(0) / 1000.0
+            segment_view["時間(分)"] = pd.to_numeric(segment_view["duration_seconds"], errors="coerce").fillna(0) / 60.0
+            segment_view["排除原因"] = segment_view["exclude_reason"].fillna("未排除").replace({"": "未排除", "None": "未排除"})
+            segment_view["備註"] = segment_view["exclude_note"].fillna("")
+            edit_columns = [
+                "不計入預估里程",
+                "排除原因",
+                "備註",
+                "work_date",
+                "employee_label",
+                "segment_no",
+                "路段",
+                "距離(km)",
+                "時間(分)",
+                "cache_key",
+                "attendance_uid",
+                "attendance_key",
+                "segment_type",
+            ]
+            edited_segments = st.data_editor(
+                segment_view[edit_columns],
+                width="stretch",
+                hide_index=True,
+                disabled=[
+                    "work_date",
+                    "employee_label",
+                    "segment_no",
+                    "路段",
+                    "距離(km)",
+                    "時間(分)",
+                    "cache_key",
+                    "attendance_uid",
+                    "attendance_key",
+                    "segment_type",
+                ],
+                column_config={
+                    "不計入預估里程": st.column_config.CheckboxColumn("不計入預估里程"),
+                    "排除原因": st.column_config.SelectboxColumn(
+                        "排除原因",
+                        options=["未排除", "高鐵/公共運輸", "總公司會議", "非自駕", "私人行程", "其他"],
+                    ),
+                    "距離(km)": st.column_config.NumberColumn("距離(km)", format="%.2f"),
+                    "時間(分)": st.column_config.NumberColumn("時間(分)", format="%.1f"),
+                    "cache_key": None,
+                    "attendance_uid": None,
+                    "attendance_key": None,
+                    "segment_type": None,
+                },
+                key="route_segment_adjust_editor",
+            )
+            excluded_km_preview = float(
+                edited_segments.loc[edited_segments["不計入預估里程"], "距離(km)"].fillna(0).sum()
+            )
+            st.metric("本次畫面勾選排除里程", f"{excluded_km_preview:.2f} km")
+            if st.button("儲存路徑核算調整", key="save_route_segment_adjustments", width="stretch"):
+                rows_to_save = []
+                for _, row in edited_segments.iterrows():
+                    is_excluded = bool(row["不計入預估里程"])
+                    rows_to_save.append(
+                        {
+                            "cache_key": row["cache_key"],
+                            "attendance_uid": row["attendance_uid"],
+                            "attendance_key": row["attendance_key"],
+                            "segment_no": int(row["segment_no"]),
+                            "segment_type": row["segment_type"],
+                            "exclude_from_mileage": is_excluded,
+                            "exclude_reason": row["排除原因"] if is_excluded and row["排除原因"] != "未排除" else "",
+                            "exclude_note": row["備註"] if is_excluded else "",
+                            "updated_by": "streamlit",
+                        }
+                    )
+                upsert_route_segment_exclusions(config.sqlite_path, rows_to_save)
+                rebuild_google_route_summary_from_cache(
+                    db_path=config.sqlite_path,
+                    attendance_slice=adjust_attendance,
+                    raw_events=raw_events,
+                    employees=employees,
+                    route_mode=config.route_mode,
+                )
+                st.success("已儲存調整，並重新計算排除後里程。")
+                st.cache_data.clear()
+                st.rerun()
 
 with tab_routes_api:
     st.subheader("Google Routes API 手動執行")

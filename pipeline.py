@@ -140,6 +140,40 @@ def import_attendance_batches(importer: CheckinImporter, source_files: list[Path
     return raw_all, attendance_all
 
 
+def apply_google_route_summary(route_summary: pd.DataFrame, google_summary: pd.DataFrame) -> pd.DataFrame:
+    if route_summary.empty or google_summary is None or google_summary.empty:
+        return route_summary
+    work = route_summary.copy()
+    if "attendance_key" not in work.columns:
+        work["attendance_key"] = work["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
+    google = google_summary.copy()
+    if "attendance_key" not in google.columns:
+        google["attendance_key"] = google["attendance_uid"].astype("string").str.split("_").str[:3].str.join("_")
+    overlay_columns = [
+        "route_mode",
+        "estimated_total_km",
+        "estimated_business_km",
+        "estimated_travel_min",
+        "route_start_type",
+        "route_end_type",
+        "route_confidence",
+        "route_notes",
+    ]
+    optional_columns = [column for column in ["raw_estimated_total_km", "excluded_km"] if column in google.columns]
+    google = google[["attendance_key", *overlay_columns, *optional_columns]].rename(
+        columns={column: f"google_{column}" for column in [*overlay_columns, *optional_columns]}
+    )
+    work = work.merge(google, on="attendance_key", how="left")
+    for column in [*overlay_columns, *optional_columns]:
+        google_column = f"google_{column}"
+        if google_column in work.columns:
+            if column in work.columns:
+                work[column] = work[google_column].combine_first(work[column])
+            else:
+                work[column] = work[google_column]
+    return work.drop(columns=[column for column in work.columns if column.startswith("google_")], errors="ignore")
+
+
 def run_pipeline(config: AppConfig | None = None) -> dict[str, pd.DataFrame]:
     config = config or build_config()
     ensure_directories(config)
@@ -174,6 +208,14 @@ def run_pipeline(config: AppConfig | None = None) -> dict[str, pd.DataFrame]:
     raw_events, attendance = import_attendance_batches(importer, xlsx_sources)
     stop_matches = matcher.build_matches(raw_events, attendance, hospital_clean, clients)
     route_summary = routing.summarize_routes(raw_events, attendance, employees, stop_matches)
+    google_route_summary = rebuild_google_route_summary_from_cache(
+        db_path=config.sqlite_path,
+        attendance_slice=attendance,
+        raw_events=raw_events,
+        employees=employees,
+        route_mode=config.route_mode,
+    )
+    route_summary = apply_google_route_summary(route_summary, google_route_summary)
 
     monthly_claims = load_optional_csv(config.data_dir / "monthly_claims.csv")
     attendance_aux = load_optional_csv(config.data_dir / "attendance_aux.csv")
@@ -208,14 +250,6 @@ def run_pipeline(config: AppConfig | None = None) -> dict[str, pd.DataFrame]:
             "finance_audit_result",
         ]:
             db.replace_table(conn, table_name, result_tables[table_name])
-
-    rebuild_google_route_summary_from_cache(
-        db_path=config.sqlite_path,
-        attendance_slice=attendance,
-        raw_events=raw_events,
-        employees=employees,
-        route_mode=config.route_mode,
-    )
 
     for table_name, dataframe in result_tables.items():
         dataframe.to_csv(config.cleaned_dir / f"{table_name}.csv", index=False, encoding="utf-8-sig")

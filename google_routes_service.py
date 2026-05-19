@@ -306,6 +306,76 @@ def fetch_cached_segments_for_segments(
     return cached
 
 
+def load_route_segment_exclusions(db_path: str | Path) -> pd.DataFrame:
+    with get_connection(db_path) as conn:
+        try:
+            return pd.read_sql_query(
+                """
+                SELECT cache_key, attendance_uid, attendance_key, segment_no, segment_type,
+                       exclude_from_mileage, exclude_reason, exclude_note, updated_by, updated_at
+                FROM route_segment_exclusion
+                WHERE exclude_from_mileage = 1
+                ORDER BY attendance_key, segment_no
+                """,
+                conn,
+            )
+        except Exception:  # noqa: BLE001
+            return pd.DataFrame()
+
+
+def upsert_route_segment_exclusions(db_path: str | Path, rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        return
+    sql = """
+        INSERT INTO route_segment_exclusion (
+            cache_key, attendance_uid, attendance_key, segment_no, segment_type,
+            exclude_from_mileage, exclude_reason, exclude_note, updated_by, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(cache_key) DO UPDATE SET
+            attendance_uid = excluded.attendance_uid,
+            attendance_key = excluded.attendance_key,
+            segment_no = excluded.segment_no,
+            segment_type = excluded.segment_type,
+            exclude_from_mileage = excluded.exclude_from_mileage,
+            exclude_reason = excluded.exclude_reason,
+            exclude_note = excluded.exclude_note,
+            updated_by = excluded.updated_by,
+            updated_at = excluded.updated_at
+    """
+    with get_connection(db_path) as conn:
+        for row in rows:
+            conn.execute(
+                sql,
+                (
+                    row["cache_key"],
+                    row.get("attendance_uid"),
+                    row.get("attendance_key") or derive_attendance_key(row.get("attendance_uid")),
+                    row.get("segment_no"),
+                    row.get("segment_type"),
+                    1 if row.get("exclude_from_mileage") else 0,
+                    row.get("exclude_reason"),
+                    row.get("exclude_note"),
+                    row.get("updated_by"),
+                    _now_text(),
+                ),
+            )
+        conn.commit()
+
+
+def load_active_exclusion_keys(conn: sqlite3.Connection) -> set[str]:
+    try:
+        rows = conn.execute(
+            """
+            SELECT cache_key
+            FROM route_segment_exclusion
+            WHERE exclude_from_mileage = 1
+            """
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return set()
+    return {str(row[0]) for row in rows if row[0]}
+
+
 def compute_route_via_google(api_key: str, segment: RouteSegment) -> dict[str, Any]:
     headers = {
         "Content-Type": "application/json",
@@ -397,6 +467,14 @@ def upsert_summary_rows(
         return pd.DataFrame()
     employee_lookup = employees.set_index("employee_id")
     segment_df = pd.DataFrame(segment_rows)
+    if "cache_key" not in segment_df.columns:
+        segment_df["cache_key"] = None
+    active_exclusion_keys = load_active_exclusion_keys(conn)
+    segment_df["is_excluded_from_mileage"] = segment_df["cache_key"].astype("string").isin(active_exclusion_keys)
+    segment_df["billable_distance_meters"] = segment_df["distance_meters"].where(
+        ~segment_df["is_excluded_from_mileage"],
+        0,
+    )
     attendance_meta = attendance_slice[["attendance_uid", "employee_id"]].copy()
     attendance_meta["attendance_key"] = attendance_slice["attendance_key"]
     merged = segment_df.merge(attendance_meta, on=["attendance_uid", "attendance_key"], how="left")
@@ -405,7 +483,9 @@ def upsert_summary_rows(
         attendance_uid = group["attendance_uid"].iloc[0]
         employee_id = group["employee_id"].iloc[0]
         employee = employee_lookup.loc[employee_id] if employee_id in employee_lookup.index else None
-        total_km = group["distance_meters"].fillna(0).sum() / 1000.0
+        raw_total_km = group["distance_meters"].fillna(0).sum() / 1000.0
+        total_km = group["billable_distance_meters"].fillna(0).sum() / 1000.0
+        excluded_km = raw_total_km - total_km
         total_min = group["duration_seconds"].fillna(0).sum() / 60.0
         base_commute = float(employee["base_commute_km"]) if employee is not None and pd.notna(employee.get("base_commute_km")) else 0.0
         business_km = max(total_km - (base_commute * 2), 0.0)
@@ -418,13 +498,15 @@ def upsert_summary_rows(
             "segment_count": int(len(group)),
             "cached_segment_count": int((group["source"] == "cache").sum()),
             "api_segment_count": int((group["source"] == "api").sum()),
+            "raw_estimated_total_km": round(raw_total_km, 2),
+            "excluded_km": round(excluded_km, 2),
             "estimated_total_km": round(total_km, 2),
             "estimated_business_km": round(business_km, 2),
             "estimated_travel_min": round(total_min, 2),
             "route_start_type": route_start_type,
             "route_end_type": route_end_type,
             "route_confidence": 0.98,
-            "route_notes": "google_routes_cached",
+            "route_notes": "google_routes_cached;manual_exclusion" if excluded_km > 0 else "google_routes_cached",
             "calculated_at": _now_text(),
         }
         output_rows.append(row)
@@ -432,9 +514,9 @@ def upsert_summary_rows(
             """
             INSERT OR REPLACE INTO google_route_summary (
                 attendance_uid, attendance_key, route_mode, segment_count, cached_segment_count, api_segment_count,
-                estimated_total_km, estimated_business_km, estimated_travel_min,
+                raw_estimated_total_km, excluded_km, estimated_total_km, estimated_business_km, estimated_travel_min,
                 route_start_type, route_end_type, route_confidence, route_notes, calculated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             tuple(row.values()),
         )
@@ -469,6 +551,7 @@ def compute_and_cache_routes(
                     {
                         "attendance_uid": segment.attendance_uid,
                         "attendance_key": segment.attendance_key,
+                        "cache_key": row.get("matched_cache_key", segment.cache_key),
                         "segment_no": segment.segment_no,
                         "segment_type": segment.segment_type,
                         "distance_meters": float(row["distance_meters"] or 0),
@@ -498,6 +581,7 @@ def compute_and_cache_routes(
                 {
                     "attendance_uid": segment.attendance_uid,
                     "attendance_key": segment.attendance_key,
+                    "cache_key": segment.cache_key,
                     "segment_no": segment.segment_no,
                     "segment_type": segment.segment_type,
                     "distance_meters": float(result["distance_meters"] or 0),
@@ -549,6 +633,7 @@ def rebuild_google_route_summary_from_cache(
                 {
                     "attendance_uid": segment.attendance_uid,
                     "attendance_key": segment.attendance_key,
+                    "cache_key": row.get("matched_cache_key", segment.cache_key),
                     "segment_no": segment.segment_no,
                     "segment_type": segment.segment_type,
                     "distance_meters": float(row["distance_meters"] or 0),
@@ -586,7 +671,7 @@ def load_google_route_cache(db_path: str | Path) -> pd.DataFrame:
         try:
             return pd.read_sql_query(
                 """
-                SELECT attendance_uid, attendance_key, segment_no, segment_type, polyline, distance_meters, duration_seconds, status
+                SELECT cache_key, attendance_uid, attendance_key, segment_no, segment_type, polyline, distance_meters, duration_seconds, status
                 FROM google_route_cache
                 WHERE status = 'ok'
                 ORDER BY attendance_uid, segment_no
@@ -602,7 +687,7 @@ def load_google_route_cache_detail(db_path: str | Path) -> pd.DataFrame:
         try:
             return pd.read_sql_query(
                 """
-                SELECT attendance_uid, attendance_key, segment_no, segment_type, polyline, distance_meters,
+                SELECT cache_key, attendance_uid, attendance_key, segment_no, segment_type, polyline, distance_meters,
                        duration_seconds, status, error_message, calculated_at
                 FROM google_route_cache
                 ORDER BY attendance_uid, segment_no, calculated_at DESC

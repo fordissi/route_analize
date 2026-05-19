@@ -193,6 +193,8 @@ CREATE TABLE IF NOT EXISTS google_route_summary (
     segment_count INTEGER,
     cached_segment_count INTEGER,
     api_segment_count INTEGER,
+    raw_estimated_total_km REAL,
+    excluded_km REAL,
     estimated_total_km REAL,
     estimated_business_km REAL,
     estimated_travel_min REAL,
@@ -201,6 +203,19 @@ CREATE TABLE IF NOT EXISTS google_route_summary (
     route_confidence REAL,
     route_notes TEXT,
     calculated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS route_segment_exclusion (
+    cache_key TEXT PRIMARY KEY,
+    attendance_uid TEXT,
+    attendance_key TEXT,
+    segment_no INTEGER,
+    segment_type TEXT,
+    exclude_from_mileage INTEGER DEFAULT 1,
+    exclude_reason TEXT,
+    exclude_note TEXT,
+    updated_by TEXT,
+    updated_at TEXT
 );
 """
 
@@ -244,6 +259,8 @@ class DatabaseManager:
     def _migrate_route_tables(self, conn: sqlite3.Connection) -> None:
         self._ensure_column(conn, "google_route_cache", "attendance_key", "TEXT")
         self._ensure_column(conn, "google_route_summary", "attendance_key", "TEXT")
+        self._ensure_column(conn, "google_route_summary", "raw_estimated_total_km", "REAL")
+        self._ensure_column(conn, "google_route_summary", "excluded_km", "REAL")
 
         cache_rows = conn.execute(
             "SELECT cache_key, attendance_uid, attendance_key FROM google_route_cache"

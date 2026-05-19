@@ -1,28 +1,28 @@
 ﻿year_month,employee_id,claimed_km,claim_source,submitted_at,remark
-2026-03,HS02,621.84,mock_assistant_seed,2026-03-28 18:00:00,mock green band
-2026-03,HS03,371.83,mock_assistant_seed,2026-03-28 18:00:00,mock yellow band
-2026-03,HS06,262.24,mock_assistant_seed,2026-03-28 18:00:00,mock red band
-2026-03,HS09,259.02,mock_assistant_seed,2026-03-28 18:00:00,mock green band
-2026-03,HS11,68.22,mock_assistant_seed,2026-03-28 18:00:00,mock green band
-2026-03,WS01,486.22,mock_assistant_seed,2026-03-28 18:00:00,mock yellow band
-2026-03,WS05,877.36,mock_assistant_seed,2026-03-28 18:00:00,mock red band
-2026-03,WS08,507.95,mock_assistant_seed,2026-03-28 18:00:00,mock green band
-2026-03,WS09,866.28,mock_assistant_seed,2026-03-28 18:00:00,mock green band
-2026-03,WS10,223.2,mock_assistant_seed,2026-03-28 18:00:00,mock yellow band
-2026-03,WS11,408.08,mock_assistant_seed,2026-03-28 18:00:00,mock red band
-2026-03,WS13,94.33,mock_assistant_seed,2026-03-28 18:00:00,mock green band
-2026-03,WS14,1025.99,mock_assistant_seed,2026-03-28 18:00:00,mock green band
-2026-04,HS02,1577.17,mock_assistant_seed,2026-04-28 18:00:00,mock yellow band
-2026-04,HS03,1112.69,mock_assistant_seed,2026-04-28 18:00:00,mock red band
-2026-04,HS06,435.12,mock_assistant_seed,2026-04-28 18:00:00,mock green band
-2026-04,HS09,126.44,mock_assistant_seed,2026-04-28 18:00:00,mock green band
-2026-04,HS11,109.2,mock_assistant_seed,2026-04-28 18:00:00,mock yellow band
-2026-04,WS01,750.75,mock_assistant_seed,2026-04-28 18:00:00,mock red band
-2026-04,WS05,473.41,mock_assistant_seed,2026-04-28 18:00:00,mock green band
-2026-04,WS08,749.54,mock_assistant_seed,2026-04-28 18:00:00,mock green band
-2026-04,WS09,1833.44,mock_assistant_seed,2026-04-28 18:00:00,mock yellow band
-2026-04,WS10,991.6,mock_assistant_seed,2026-04-28 18:00:00,mock red band
-2026-04,WS11,456.59,mock_assistant_seed,2026-04-28 18:00:00,mock green band
-2026-04,WS13,261.44,mock_assistant_seed,2026-04-28 18:00:00,mock green band
-2026-04,WS14,2588.38,mock_assistant_seed,2026-04-28 18:00:00,mock yellow band
-2026-04,WS15,197.4,mock_assistant_seed,2026-04-28 18:00:00,mock red band
+26-Mar,HS02,3721,hr,2026/3/28 18:00,
+26-Mar,HS03,1918,hr,2026/3/28 18:00,
+26-Mar,HS06,1449,hr,2026/3/28 18:00,
+26-Mar,HS09,1951,hr,2026/3/28 18:00,
+26-Mar,HS11,2101,hr,2026/3/28 18:00,
+26-Mar,WS01,1845,hr,2026/3/28 18:00,
+26-Mar,WS05,3103,hr,2026/3/28 18:00,
+26-Mar,WS08,2523,hr,2026/3/28 18:00,
+26-Mar,WS09,3046,hr,2026/3/28 18:00,
+26-Mar,WS10,4177,hr,2026/3/28 18:00,
+26-Mar,WS11,2693,hr,2026/3/28 18:00,
+26-Mar,WS13,1595,hr,2026/3/28 18:00,
+26-Mar,WS14,4128,hr,2026/3/28 18:00,
+26-Apr,HS02,2698,hr,2026/4/28 18:00,
+26-Apr,HS03,1550,hr,2026/4/28 18:00,
+26-Apr,HS06,1508,hr,2026/4/28 18:00,
+26-Apr,HS09,1432,hr,2026/4/28 18:00,
+26-Apr,HS11,2071,hr,2026/4/28 18:00,
+26-Apr,WS01,1622,hr,2026/4/28 18:00,
+26-Apr,WS05,1870,hr,2026/4/28 18:00,
+26-Apr,WS08,2228,hr,2026/4/28 18:00,
+26-Apr,WS09,3237,hr,2026/4/28 18:00,
+26-Apr,WS10,4223,hr,2026/4/28 18:00,
+26-Apr,WS11,2638,hr,2026/4/28 18:00,
+26-Apr,WS13,1671,hr,2026/4/28 18:00,
+26-Apr,WS14,3428,hr,2026/4/28 18:00,
+26-Apr,WS15,694,hr,2026/4/28 18:00,

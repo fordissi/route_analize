@@ -201,6 +201,8 @@ class RiskService:
             return set()
 
         events = raw_events.copy()
+        if {"gps_lat", "gps_lon"}.issubset(events.columns):
+            events = events[events["gps_lat"].notna() & events["gps_lon"].notna()].copy()
         events["actual_dt"] = pd.to_datetime(events["actual_time"], errors="coerce")
         if "source_row_no" not in events.columns:
             events["source_row_no"] = range(1, len(events) + 1)

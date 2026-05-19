@@ -141,10 +141,10 @@ class RiskService:
         reasons = set(reason_codes)
         if "impossible_travel_time" in reasons:
             return "高風險需覆核"
-        if "far_customer_override" in reasons or "selected_distance_too_far" in reasons:
-            return "需覆核"
         if score >= 10:
             return "高風險需覆核"
+        if "far_customer_override" in reasons or "selected_distance_too_far" in reasons:
+            return "需覆核"
         if score > 0:
             return "低信心"
         return "正常"

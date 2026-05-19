@@ -152,3 +152,108 @@ def test_impossible_travel_pairs_skip_non_gps_events() -> None:
     e2_reasons = result.loc[result["event_uid"] == "e2", "risk_reason_codes"].iloc[0]
     assert "impossible_travel_time" not in clock_reasons
     assert "impossible_travel_time" in e2_reasons
+
+
+def test_home_area_only_trace_requires_review() -> None:
+    event_risk = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "risk_level": "正常", "risk_score": 0, "risk_reason_codes": ""},
+            {"event_uid": "e2", "attendance_uid": "a1", "risk_level": "正常", "risk_score": 0, "risk_reason_codes": ""},
+        ]
+    )
+    attendance = pd.DataFrame(
+        [
+            {
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "employee_name": "員工A",
+                "department": "業務",
+                "work_date": "2026-05-08",
+                "gps_event_count": 2,
+            }
+        ]
+    )
+    raw_events = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "gps_lat": 24.70000, "gps_lon": 121.77000, "actual_time": "2026-05-08 08:00:00"},
+            {"event_uid": "e2", "attendance_uid": "a1", "gps_lat": 24.70050, "gps_lon": 121.77050, "actual_time": "2026-05-08 18:00:00"},
+        ]
+    )
+    employees = pd.DataFrame(
+        [{"employee_id": "A", "home_lat": 24.70010, "home_lon": 121.77010}]
+    )
+
+    service = RiskService(make_config())
+    daily = service.build_daily_risk_summary(event_risk, attendance, raw_events=raw_events, employees=employees, matches=pd.DataFrame())
+    row = daily.iloc[0]
+
+    assert row["risk_level"] == "需覆核"
+    assert row["home_area_only_trace"] == 1
+    assert "home_area_only_trace" in row["risk_reason_summary"]
+    assert row["risk_score"] >= 6
+
+
+def test_home_start_end_with_field_visit_is_not_penalized() -> None:
+    event_risk = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "risk_level": "正常", "risk_score": 0, "risk_reason_codes": ""},
+            {"event_uid": "e2", "attendance_uid": "a1", "risk_level": "正常", "risk_score": 0, "risk_reason_codes": ""},
+            {"event_uid": "e3", "attendance_uid": "a1", "risk_level": "正常", "risk_score": 0, "risk_reason_codes": ""},
+        ]
+    )
+    attendance = pd.DataFrame(
+        [
+            {
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "employee_name": "員工A",
+                "department": "業務",
+                "work_date": "2026-05-08",
+                "gps_event_count": 3,
+            }
+        ]
+    )
+    raw_events = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "gps_lat": 24.70000, "gps_lon": 121.77000, "actual_time": "2026-05-08 08:00:00"},
+            {"event_uid": "e2", "attendance_uid": "a1", "gps_lat": 24.73000, "gps_lon": 121.80000, "actual_time": "2026-05-08 10:00:00"},
+            {"event_uid": "e3", "attendance_uid": "a1", "gps_lat": 24.70040, "gps_lon": 121.77040, "actual_time": "2026-05-08 18:00:00"},
+        ]
+    )
+    employees = pd.DataFrame(
+        [{"employee_id": "A", "home_lat": 24.70010, "home_lon": 121.77010}]
+    )
+    matches = pd.DataFrame(
+        [
+            {"event_uid": "e2", "attendance_uid": "a1", "is_selected": 1, "beeline_meter": 120.0, "selection_type": "既有客戶"}
+        ]
+    )
+
+    service = RiskService(make_config())
+    daily = service.build_daily_risk_summary(event_risk, attendance, raw_events=raw_events, employees=employees, matches=matches)
+
+    assert daily.iloc[0]["home_area_only_trace"] == 0
+    assert "home_area_only_trace" not in daily.iloc[0]["risk_reason_summary"]
+
+
+def test_employee_summary_normalizes_by_gps_count() -> None:
+    event_risk = pd.DataFrame(
+        [
+            {"event_uid": "a1e1", "attendance_uid": "a1", "risk_level": "需覆核", "risk_score": 8, "risk_reason_codes": "far_customer_override"},
+            {"event_uid": "a1e2", "attendance_uid": "a1", "risk_level": "正常", "risk_score": 0, "risk_reason_codes": ""},
+            {"event_uid": "b1e1", "attendance_uid": "b1", "risk_level": "需覆核", "risk_score": 8, "risk_reason_codes": "far_customer_override"},
+        ]
+    )
+    attendance = pd.DataFrame(
+        [
+            {"attendance_uid": "a1", "employee_id": "A", "employee_name": "員工A", "department": "業務", "work_date": "2026-05-08", "gps_event_count": 10},
+            {"attendance_uid": "b1", "employee_id": "B", "employee_name": "員工B", "department": "業務", "work_date": "2026-05-08", "gps_event_count": 2},
+        ]
+    )
+
+    service = RiskService(make_config())
+    daily = service.build_daily_risk_summary(event_risk, attendance)
+    employee = service.build_employee_risk_summary(daily)
+
+    assert set(daily["attendance_uid"]) == {"a1", "b1"}
+    assert employee.sort_values("risk_rate", ascending=False).iloc[0]["employee_id"] == "B"

@@ -47,6 +47,7 @@ class RiskService:
         if raw_events.empty:
             return pd.DataFrame(columns=EVENT_RISK_COLUMNS)
 
+        impossible_event_ids = self._impossible_travel_event_ids(raw_events, route_segments)
         rows = []
         for _, event in raw_events.iterrows():
             event_uid = event.get("event_uid")
@@ -54,14 +55,20 @@ class RiskService:
                 candidates = pd.DataFrame()
             else:
                 candidates = matches[matches["event_uid"] == event_uid].copy()
-            rows.append(self._score_event(event, candidates))
+            rows.append(self._score_event(event, candidates, impossible_event_ids))
 
         return pd.DataFrame(rows, columns=EVENT_RISK_COLUMNS)
 
-    def _score_event(self, event: pd.Series, candidates: pd.DataFrame) -> dict[str, Any]:
+    def _score_event(
+        self,
+        event: pd.Series,
+        candidates: pd.DataFrame,
+        impossible_event_ids: set[Any] | None = None,
+    ) -> dict[str, Any]:
         reason_codes: list[str] = []
         event_uid = event.get("event_uid")
         attendance_uid = event.get("attendance_uid")
+        impossible_event_ids = impossible_event_ids or set()
 
         selected_distance = None
         nearest_distance = None
@@ -115,6 +122,9 @@ class RiskService:
                 ]
                 if len(close_candidates) >= int(self.config.risk_ambiguity_candidate_count):
                     reason_codes.append("nearby_candidate_conflict")
+
+        if event_uid in impossible_event_ids:
+            reason_codes.append("impossible_travel_time")
 
         reason_codes = list(dict.fromkeys(reason_codes))
         risk_score = sum(REASON_WEIGHTS[code] for code in reason_codes)
@@ -178,6 +188,65 @@ class RiskService:
         if "impossible_travel_time" in reason_codes:
             text.append("相鄰行程移動時間不合理")
         return "；".join(text)
+
+    def _impossible_travel_event_ids(self, raw_events: pd.DataFrame, route_segments: pd.DataFrame) -> set[Any]:
+        if raw_events.empty or route_segments.empty:
+            return set()
+
+        event_required_columns = {"attendance_uid", "event_uid", "actual_time"}
+        segment_required_columns = {"attendance_uid", "segment_no", "segment_type", "duration_seconds"}
+        if not event_required_columns.issubset(raw_events.columns):
+            return set()
+        if not segment_required_columns.issubset(route_segments.columns):
+            return set()
+
+        events = raw_events.copy()
+        events["actual_dt"] = pd.to_datetime(events["actual_time"], errors="coerce")
+        if "source_row_no" not in events.columns:
+            events["source_row_no"] = range(1, len(events) + 1)
+        events["source_row_no"] = pd.to_numeric(events["source_row_no"], errors="coerce")
+        events = events.dropna(subset=["attendance_uid", "event_uid", "actual_dt"]).sort_values(
+            ["attendance_uid", "actual_dt", "source_row_no"],
+            na_position="last",
+        )
+        if events.empty:
+            return set()
+
+        grouped_events = events.groupby("attendance_uid", sort=False)
+        events["next_event_uid"] = grouped_events["event_uid"].shift(-1)
+        events["next_actual_dt"] = grouped_events["actual_dt"].shift(-1)
+        events["pair_no"] = grouped_events.cumcount() + 1
+        events["elapsed_seconds"] = (events["next_actual_dt"] - events["actual_dt"]).dt.total_seconds()
+        event_pairs = events.dropna(subset=["next_event_uid", "elapsed_seconds"])[
+            ["attendance_uid", "pair_no", "next_event_uid", "elapsed_seconds"]
+        ]
+        if event_pairs.empty:
+            return set()
+
+        segments = route_segments[route_segments["segment_type"] == "between_points"].copy()
+        if segments.empty:
+            return set()
+
+        segments["duration_seconds"] = pd.to_numeric(segments["duration_seconds"], errors="coerce")
+        segments = segments.dropna(subset=["attendance_uid", "segment_no", "duration_seconds"]).sort_values(
+            ["attendance_uid", "segment_no"],
+            na_position="last",
+        )
+        if segments.empty:
+            return set()
+
+        segments["pair_no"] = segments.groupby("attendance_uid", sort=False).cumcount() + 1
+        paired = event_pairs.merge(
+            segments[["attendance_uid", "pair_no", "duration_seconds"]],
+            on=["attendance_uid", "pair_no"],
+            how="inner",
+        )
+        if paired.empty:
+            return set()
+
+        buffer_seconds = float(self.config.risk_impossible_travel_buffer_min) * 60
+        impossible = paired["duration_seconds"] > paired["elapsed_seconds"].fillna(float("inf")) + buffer_seconds
+        return set(paired.loc[impossible, "next_event_uid"])
 
     @staticmethod
     def _as_bool(value: Any) -> bool:

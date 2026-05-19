@@ -82,3 +82,44 @@ def test_distant_only_candidate_without_selection_is_not_reasonable() -> None:
     assert row["risk_level"] == "低信心"
     assert "no_reasonable_candidate" in row["risk_reason_codes"]
     assert row["risk_score"] > 0
+
+
+def test_nearby_candidate_conflict_is_low_confidence() -> None:
+    matches = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "seq_no": 1, "candidate_rank": 1, "hospital_id": "h1", "hospital_label": "A診所", "beeline_meter": 120.0, "is_existing_client": 0, "is_selected": 1, "selection_type": "潛在院所"},
+            {"event_uid": "e1", "attendance_uid": "a1", "seq_no": 1, "candidate_rank": 2, "hospital_id": "h2", "hospital_label": "B診所", "beeline_meter": 180.0, "is_existing_client": 0, "is_selected": 0, "selection_type": "潛在院所"},
+            {"event_uid": "e1", "attendance_uid": "a1", "seq_no": 1, "candidate_rank": 3, "hospital_id": "h3", "hospital_label": "C診所", "beeline_meter": 220.0, "is_existing_client": 0, "is_selected": 0, "selection_type": "潛在院所"},
+        ]
+    )
+    raw_events = pd.DataFrame([{"event_uid": "e1", "attendance_uid": "a1", "actual_time": "2026-05-08 08:00:00"}])
+
+    result = RiskService(make_config()).build_event_risk(raw_events, matches, pd.DataFrame(), pd.DataFrame())
+
+    assert result.iloc[0]["risk_level"] == "低信心"
+    assert "nearby_candidate_conflict" in result.iloc[0]["risk_reason_codes"]
+
+
+def test_impossible_travel_time_is_high_risk() -> None:
+    matches = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "seq_no": 1, "candidate_rank": 1, "hospital_id": "h1", "hospital_label": "A診所", "beeline_meter": 50.0, "is_existing_client": 0, "is_selected": 1, "selection_type": "潛在院所"},
+            {"event_uid": "e2", "attendance_uid": "a1", "seq_no": 2, "candidate_rank": 1, "hospital_id": "h2", "hospital_label": "B診所", "beeline_meter": 60.0, "is_existing_client": 0, "is_selected": 1, "selection_type": "潛在院所"},
+        ]
+    )
+    raw_events = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "actual_time": "2026-05-08 08:00:00", "source_row_no": 1},
+            {"event_uid": "e2", "attendance_uid": "a1", "actual_time": "2026-05-08 08:10:00", "source_row_no": 2},
+        ]
+    )
+    route_segments = pd.DataFrame(
+        [
+            {"attendance_uid": "a1", "segment_no": 1, "segment_type": "between_points", "duration_seconds": 3600, "distance_meters": 20000, "status": "OK"}
+        ]
+    )
+
+    result = RiskService(make_config()).build_event_risk(raw_events, matches, route_segments, pd.DataFrame())
+
+    assert "impossible_travel_time" in result.loc[result["event_uid"] == "e2", "risk_reason_codes"].iloc[0]
+    assert result.loc[result["event_uid"] == "e2", "risk_level"].iloc[0] == "高風險需覆核"

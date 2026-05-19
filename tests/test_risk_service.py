@@ -66,3 +66,19 @@ def test_score_at_least_10_takes_high_risk_precedence() -> None:
     assert "far_customer_override" in row["risk_reason_codes"]
     assert "selected_not_top5" in row["risk_reason_codes"]
     assert "selected_distance_too_far" in row["risk_reason_codes"]
+
+
+def test_distant_only_candidate_without_selection_is_not_reasonable() -> None:
+    matches = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "seq_no": 1, "candidate_rank": 1, "hospital_id": "h1", "hospital_label": "far clinic", "beeline_meter": 2500.0},
+        ]
+    )
+    raw_events = pd.DataFrame([{"event_uid": "e1", "attendance_uid": "a1", "actual_time": "2026-05-08 08:08:04"}])
+
+    result = RiskService(make_config()).build_event_risk(raw_events, matches, pd.DataFrame(), pd.DataFrame())
+    row = result.iloc[0]
+
+    assert row["risk_level"] == "低信心"
+    assert "no_reasonable_candidate" in row["risk_reason_codes"]
+    assert row["risk_score"] > 0

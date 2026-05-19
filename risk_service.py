@@ -84,6 +84,8 @@ class RiskService:
                 nearest = candidates.sort_values(["beeline_meter", "candidate_rank"], na_position="last").iloc[0]
                 nearest_distance = float(nearest["beeline_meter"])
                 nearest_name = nearest.get("hospital_label")
+                if nearest_distance > float(self.config.risk_auto_select_max_distance_m):
+                    reason_codes.append("no_reasonable_candidate")
 
                 if "is_selected" in candidates.columns:
                     selected_rows = candidates[self._as_bool_series(candidates["is_selected"])]

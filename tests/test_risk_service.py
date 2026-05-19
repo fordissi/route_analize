@@ -257,3 +257,60 @@ def test_employee_summary_normalizes_by_gps_count() -> None:
 
     assert set(daily["attendance_uid"]) == {"a1", "b1"}
     assert employee.sort_values("risk_rate", ascending=False).iloc[0]["employee_id"] == "B"
+
+
+def test_daily_summary_counts_high_risk_event_label() -> None:
+    event_risk = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "risk_level": "高風險需覆核",
+                "risk_score": 10,
+                "risk_reason_codes": "impossible_travel_time",
+            }
+        ]
+    )
+    attendance = pd.DataFrame(
+        [
+            {
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "employee_name": "員工A",
+                "department": "業務",
+                "work_date": "2026-05-08",
+                "gps_event_count": 1,
+            }
+        ]
+    )
+
+    daily = RiskService(make_config()).build_daily_risk_summary(event_risk, attendance)
+    row = daily.iloc[0]
+
+    assert row["high_risk_event_count"] == 1
+    assert row["review_event_count"] == 1
+    assert row["risk_level"] == "高風險需覆核"
+
+
+def test_employee_summary_preserves_high_risk_daily_label() -> None:
+    daily_risk = pd.DataFrame(
+        [
+            {
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "employee_name": "員工A",
+                "department": "業務",
+                "gps_event_count": 1,
+                "risk_score": 10,
+                "review_event_count": 1,
+                "high_risk_event_count": 1,
+                "home_area_only_trace": 0,
+                "home_start_end_without_field_trace": 0,
+                "insufficient_route_evidence": 0,
+            }
+        ]
+    )
+
+    employee = RiskService(make_config()).build_employee_risk_summary(daily_risk)
+
+    assert employee.iloc[0]["risk_level"] == "高風險需覆核"

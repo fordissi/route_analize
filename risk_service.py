@@ -21,6 +21,11 @@ REASON_WEIGHTS = {
     "insufficient_route_evidence": 3,
 }
 
+NORMAL_LABEL = "正常"
+LOW_CONFIDENCE_LABEL = "低信心"
+REVIEW_LABEL = "需覆核"
+HIGH_RISK_LABEL = "高風險需覆核"
+
 EVENT_RISK_COLUMNS = [
     "event_uid",
     "attendance_uid",
@@ -321,29 +326,29 @@ class RiskService:
 
     def _daily_level(self, row: pd.Series) -> str:
         if row["high_risk_event_count"] > 0 or row["risk_score"] >= 10:
-            return "重大需覆核"
+            return HIGH_RISK_LABEL
         if row["review_event_count"] > 0 or row.get("home_area_only_trace", 0) or row.get("home_start_end_without_field_trace", 0):
-            return "需覆核"
+            return REVIEW_LABEL
         if row["risk_score"] > 0:
-            return "低信心"
-        return "正常"
+            return LOW_CONFIDENCE_LABEL
+        return NORMAL_LABEL
 
     def _employee_level(self, row: pd.Series) -> str:
         if row["high_risk_event_count"] > 0 or row["home_area_only_days"] > 0 or row["risk_rate"] >= 4:
-            return "重大需覆核"
+            return HIGH_RISK_LABEL
         if row["review_event_count"] > 0 or row["home_start_end_without_field_days"] > 0 or row["risk_rate"] >= 2:
-            return "需覆核"
+            return REVIEW_LABEL
         if row["risk_score"] > 0:
-            return "低信心"
-        return "正常"
+            return LOW_CONFIDENCE_LABEL
+        return NORMAL_LABEL
 
     @staticmethod
     def _review_levels() -> set[str]:
-        return {"需覆核", "?閬", "擃◢?芷?閬", "重大需覆核"}
+        return {REVIEW_LABEL, HIGH_RISK_LABEL}
 
     @staticmethod
     def _high_risk_levels() -> set[str]:
-        return {"擃◢?芷?閬", "重大需覆核"}
+        return {HIGH_RISK_LABEL}
 
     def _score_event(
         self,
@@ -438,14 +443,14 @@ class RiskService:
     def _risk_level(self, score: int, reason_codes: list[str]) -> str:
         reasons = set(reason_codes)
         if "impossible_travel_time" in reasons:
-            return "高風險需覆核"
+            return HIGH_RISK_LABEL
         if score >= 10:
-            return "高風險需覆核"
+            return HIGH_RISK_LABEL
         if "far_customer_override" in reasons or "selected_distance_too_far" in reasons:
-            return "需覆核"
+            return REVIEW_LABEL
         if score > 0:
-            return "低信心"
-        return "正常"
+            return LOW_CONFIDENCE_LABEL
+        return NORMAL_LABEL
 
     def _reason_text(
         self,

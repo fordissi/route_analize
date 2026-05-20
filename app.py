@@ -1927,11 +1927,19 @@ def render_weekly_summary_cards(cards: list[dict[str, object]]) -> None:
             if nearest_hospital
             else "本日無最近醫院"
         )
+        risk_counts = card.get("risk_counts", {}) or {}
+        risk_summary_parts = [
+            f"{label} {int(risk_counts.get(label, 0))}"
+            for label in [HIGH_RISK_LABEL, REVIEW_LABEL, LOW_CONFIDENCE_LABEL]
+            if int(risk_counts.get(label, 0)) > 0
+        ]
+        risk_summary_text = " / ".join(risk_summary_parts) if risk_summary_parts else "無需覆核"
         html = f"""
         <div class="weekly-day-card">
             <div class="weekly-day-title">{card['label']}</div>
             <div class="weekly-day-sub">{card['date']} | 打卡 {card['event_count']} 點 / GPS {card['gps_event_count']} 點</div>
             <div class="candidate-sub">需覆核點數：{card.get('review_count', 0)}</div>
+            <div class="candidate-sub">風險摘要：{risk_summary_text}</div>
             <div class="candidate-sub">最近既有客戶：{nearest_client_text}</div>
             <div class="candidate-sub">最近醫院：{nearest_hospital_text}</div>
             <div class="candidate-sub">系統選定院所</div>

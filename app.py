@@ -1258,8 +1258,46 @@ def load_results():
         "insufficient_route_evidence_days",
         "risk_level",
     ]
+    event_risk_numeric_columns = [
+        "risk_score",
+        "selected_distance_m",
+        "nearest_distance_m",
+        "distance_gap_m",
+        "selected_rank",
+    ]
+    daily_risk_numeric_columns = [
+        "gps_event_count",
+        "risk_score",
+        "risk_rate",
+        "review_event_count",
+        "high_risk_event_count",
+        "home_area_only_trace",
+        "home_start_end_without_field_trace",
+        "insufficient_route_evidence",
+        "home_near_event_count",
+        "max_distance_from_home_m",
+        "field_visit_count",
+    ]
+    employee_risk_numeric_columns = [
+        "attendance_days",
+        "gps_event_count",
+        "risk_score",
+        "risk_rate",
+        "review_rate",
+        "review_event_count",
+        "high_risk_event_count",
+        "home_area_only_days",
+        "home_start_end_without_field_days",
+        "insufficient_route_evidence_days",
+    ]
 
-    def read_cleaned_csv(file_name: str, expected_columns: list[str]) -> pd.DataFrame:
+    def read_cleaned_csv(
+        file_name: str,
+        expected_columns: list[str],
+        *,
+        numeric_columns: list[str] | None = None,
+        date_columns: list[str] | None = None,
+    ) -> pd.DataFrame:
         path = base / file_name
         if not path.exists():
             return pd.DataFrame(columns=expected_columns)
@@ -1267,6 +1305,12 @@ def load_results():
         for column in expected_columns:
             if column not in dataframe.columns:
                 dataframe[column] = pd.NA
+        for column in numeric_columns or []:
+            if column in dataframe.columns:
+                dataframe[column] = pd.to_numeric(dataframe[column], errors="coerce")
+        for column in date_columns or []:
+            if column in dataframe.columns:
+                dataframe[column] = pd.to_datetime(dataframe[column], errors="coerce")
         return dataframe
 
     attendance = pd.read_csv(base / "attendance_day_group.csv", encoding="utf-8-sig")
@@ -1278,9 +1322,22 @@ def load_results():
     hospitals = pd.read_csv(base / "hospital_master_clean.csv", encoding="utf-8-sig")
     clients = pd.read_csv(base / "client_master.csv", encoding="utf-8-sig")
     employees = pd.read_csv(base / "employee_master.csv", encoding="utf-8-sig")
-    event_risk = read_cleaned_csv("event_risk_review.csv", event_risk_columns)
-    daily_risk = read_cleaned_csv("daily_risk_summary.csv", daily_risk_columns)
-    employee_risk = read_cleaned_csv("employee_risk_summary.csv", employee_risk_columns)
+    event_risk = read_cleaned_csv(
+        "event_risk_review.csv",
+        event_risk_columns,
+        numeric_columns=event_risk_numeric_columns,
+    )
+    daily_risk = read_cleaned_csv(
+        "daily_risk_summary.csv",
+        daily_risk_columns,
+        numeric_columns=daily_risk_numeric_columns,
+        date_columns=["work_date"],
+    )
+    employee_risk = read_cleaned_csv(
+        "employee_risk_summary.csv",
+        employee_risk_columns,
+        numeric_columns=employee_risk_numeric_columns,
+    )
 
     raw_events["work_date"] = pd.to_datetime(raw_events["work_date"], errors="coerce")
     attendance["work_date"] = pd.to_datetime(attendance["work_date"], errors="coerce")
@@ -1411,19 +1468,26 @@ def load_results():
     raw_events = raw_events.merge(nearest_match, on="event_uid", how="left")
     raw_events = raw_events.merge(nearest_client, on="event_uid", how="left")
     raw_events = raw_events.merge(nearest_hospital_only, on="event_uid", how="left")
-    if not event_risk.empty:
-        event_risk_merge_columns = [
-            "event_uid",
-            "risk_level",
-            "risk_score",
-            "risk_reason_codes",
-            "risk_reason_text",
-            "selected_distance_m",
-            "nearest_distance_m",
-            "distance_gap_m",
-            "selected_rank",
-        ]
-        raw_events = raw_events.merge(event_risk[event_risk_merge_columns], on="event_uid", how="left")
+    event_risk_merge_columns = [
+        "event_uid",
+        "risk_level",
+        "risk_score",
+        "risk_reason_codes",
+        "risk_reason_text",
+        "selected_distance_m",
+        "nearest_distance_m",
+        "distance_gap_m",
+        "selected_rank",
+    ]
+    if "event_uid" in raw_events.columns and "event_uid" in event_risk.columns:
+        risk_value_columns = [column for column in event_risk_merge_columns if column != "event_uid"]
+        raw_events = raw_events.drop(columns=risk_value_columns, errors="ignore")
+        raw_events["event_uid"] = raw_events["event_uid"].astype("string")
+        event_risk_for_merge = event_risk[event_risk_merge_columns].copy()
+        event_risk_for_merge["event_uid"] = event_risk_for_merge["event_uid"].astype("string")
+        event_risk_for_merge = event_risk_for_merge.dropna(subset=["event_uid"])
+        if not event_risk_for_merge.empty:
+            raw_events = raw_events.merge(event_risk_for_merge, on="event_uid", how="left")
 
     return {
         "config": config,

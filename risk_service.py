@@ -249,7 +249,8 @@ class RiskService:
             return pd.DataFrame(columns=columns)
 
         events = raw_events.dropna(subset=["gps_lat", "gps_lon"]).copy()
-        events = events.merge(attendance[["attendance_uid", "employee_id"]], on="attendance_uid", how="left")
+        if "employee_id" not in events.columns:
+            events = events.merge(attendance[["attendance_uid", "employee_id"]], on="attendance_uid", how="left")
         events = events.merge(employee_home, on="employee_id", how="left").dropna(subset=["home_lat", "home_lon"])
         if events.empty:
             return pd.DataFrame(columns=columns)

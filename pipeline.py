@@ -228,7 +228,7 @@ def run_pipeline(config: AppConfig | None = None) -> dict[str, pd.DataFrame]:
     daily_risk = risk_service.build_daily_risk_summary(
         event_risk,
         attendance,
-        raw_events=raw_events.drop(columns=["employee_id"], errors="ignore"),
+        raw_events=raw_events,
         employees=employees,
         matches=stop_matches,
     )

@@ -193,6 +193,60 @@ def test_home_area_only_trace_requires_review() -> None:
     assert row["risk_score"] >= 6
 
 
+def test_home_area_only_trace_accepts_raw_events_with_employee_id() -> None:
+    event_risk = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "risk_level": "甇?虜", "risk_score": 0, "risk_reason_codes": ""},
+            {"event_uid": "e2", "attendance_uid": "a1", "risk_level": "甇?虜", "risk_score": 0, "risk_reason_codes": ""},
+        ]
+    )
+    attendance = pd.DataFrame(
+        [
+            {
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "employee_name": "?∪極A",
+                "department": "璆剖?",
+                "work_date": "2026-05-08",
+                "gps_event_count": 2,
+            }
+        ]
+    )
+    raw_events = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "gps_lat": 24.70000,
+                "gps_lon": 121.77000,
+                "actual_time": "2026-05-08 08:00:00",
+            },
+            {
+                "event_uid": "e2",
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "gps_lat": 24.70050,
+                "gps_lon": 121.77050,
+                "actual_time": "2026-05-08 18:00:00",
+            },
+        ]
+    )
+    employees = pd.DataFrame(
+        [{"employee_id": "A", "home_lat": 24.70010, "home_lon": 121.77010}]
+    )
+
+    daily = RiskService(make_config()).build_daily_risk_summary(
+        event_risk,
+        attendance,
+        raw_events=raw_events,
+        employees=employees,
+        matches=pd.DataFrame(),
+    )
+
+    assert daily.iloc[0]["home_area_only_trace"] == 1
+
+
 def test_home_start_end_with_field_visit_is_not_penalized() -> None:
     event_risk = pd.DataFrame(
         [

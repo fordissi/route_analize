@@ -2337,6 +2337,7 @@ def summarize_period(
     daily_metrics: pd.DataFrame,
     routes: pd.DataFrame,
     event_flags: pd.DataFrame,
+    daily_risk: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     attendance_mask = attendance["work_date"].dt.date.between(start_date, end_date)
     metrics_mask = daily_metrics["work_date"].dt.date.between(start_date, end_date)
@@ -2344,6 +2345,30 @@ def summarize_period(
     period_attendance = attendance.loc[(attendance["employee_id"] == employee_id) & attendance_mask].copy()
     period_metrics = daily_metrics.loc[(daily_metrics["employee_id"] == employee_id) & metrics_mask].copy()
     period_routes = routes.loc[(routes["employee_id"] == employee_id) & routes_mask].copy()
+    risk_columns = [
+        "attendance_uid",
+        "risk_score",
+        "risk_rate",
+        "review_event_count",
+        "high_risk_event_count",
+        "home_area_only_trace",
+        "home_start_end_without_field_trace",
+        "insufficient_route_evidence",
+        "home_near_event_count",
+        "max_distance_from_home_m",
+        "field_visit_count",
+        "risk_level",
+        "risk_reason_summary",
+    ]
+    if daily_risk.empty:
+        period_risk = pd.DataFrame(columns=risk_columns)
+    else:
+        risk_mask = daily_risk["work_date"].dt.date.between(start_date, end_date)
+        period_risk = daily_risk.loc[(daily_risk["employee_id"] == employee_id) & risk_mask].copy()
+        for column in risk_columns:
+            if column not in period_risk.columns:
+                period_risk[column] = pd.NA
+        period_risk = period_risk[risk_columns]
 
     if period_attendance.empty:
         return pd.DataFrame(), pd.DataFrame()
@@ -2391,6 +2416,7 @@ def summarize_period(
             on="attendance_uid",
             how="left",
         )
+        .merge(period_risk, on="attendance_uid", how="left")
     )
     merged["employee_label"] = merged["employee_label"].fillna(
         merged.apply(lambda row: make_employee_label(row["employee_id"], row["employee_name"]), axis=1)
@@ -2404,6 +2430,21 @@ def summarize_period(
         merged[column] = pd.to_numeric(merged[column], errors="coerce").fillna(0).astype(int)
     for column in ["missing_punch_unprocessed_flag", "overtime_flag_bool", "actual_overtime_flag", "personal_overtime_flag"]:
         merged[column] = merged[column].fillna(False).astype(bool)
+    for column in [
+        "risk_score",
+        "risk_rate",
+        "review_event_count",
+        "high_risk_event_count",
+        "home_area_only_trace",
+        "home_start_end_without_field_trace",
+        "insufficient_route_evidence",
+        "home_near_event_count",
+        "max_distance_from_home_m",
+        "field_visit_count",
+    ]:
+        merged[column] = pd.to_numeric(merged[column], errors="coerce").fillna(0)
+    merged["risk_level"] = merged["risk_level"].fillna(NORMAL_LABEL)
+    merged["risk_reason_summary"] = merged["risk_reason_summary"].fillna("")
 
     summary = pd.DataFrame(
         [
@@ -2428,6 +2469,13 @@ def summarize_period(
                 "超時出勤率": round(float(merged["overtime_flag_bool"].fillna(False).mean()), 4),
                 "實際加班率": round(float(merged["actual_overtime_flag"].fillna(False).mean()), 4),
                 "總匹配院所次數": int(merged["matched_stop_count"].fillna(0).sum()),
+                "需覆核點數": int(merged["review_event_count"].sum()),
+                "高風險點數": int(merged["high_risk_event_count"].sum()),
+                "風險分數": round(float(merged["risk_score"].sum()), 2),
+                "平均風險率": round(float(merged["risk_rate"].mean()), 4),
+                "僅居家附近軌跡天數": int((merged["home_area_only_trace"] > 0).sum()),
+                "住家起訖但缺外勤軌跡天數": int((merged["home_start_end_without_field_trace"] > 0).sum()),
+                "路線佐證不足天數": int((merged["insufficient_route_evidence"] > 0).sum()),
             }
         ]
     )
@@ -2445,6 +2493,18 @@ def summarize_period(
             "estimated_business_km",
             "estimated_travel_min",
             "matched_stop_count",
+            "risk_level",
+            "risk_score",
+            "risk_rate",
+            "review_event_count",
+            "high_risk_event_count",
+            "home_area_only_trace",
+            "home_start_end_without_field_trace",
+            "insufficient_route_evidence",
+            "home_near_event_count",
+            "max_distance_from_home_m",
+            "field_visit_count",
+            "risk_reason_summary",
             "missing_punch_unprocessed_count",
             "missing_punch_processed_count",
             "forget_punch_application_count",
@@ -2468,6 +2528,18 @@ def summarize_period(
             "estimated_business_km": "預估公務里程",
             "estimated_travel_min": "預估移動分鐘",
             "matched_stop_count": "匹配院所數",
+            "risk_level": "覆核狀態",
+            "risk_score": "風險分數",
+            "risk_rate": "風險率",
+            "review_event_count": "需覆核點數",
+            "high_risk_event_count": "高風險點數",
+            "home_area_only_trace": "僅居家附近軌跡",
+            "home_start_end_without_field_trace": "住家起訖但缺外勤軌跡",
+            "insufficient_route_evidence": "路線佐證不足",
+            "home_near_event_count": "住家附近打卡點數",
+            "max_distance_from_home_m": "離家最遠距離(公尺)",
+            "field_visit_count": "外勤拜訪佐證數",
+            "risk_reason_summary": "覆核原因摘要",
             "missing_punch_unprocessed_count": "未打卡未處理次數",
             "missing_punch_processed_count": "未打卡已處理次數",
             "forget_punch_application_count": "忘刷申請次數",
@@ -3526,7 +3598,16 @@ with tab_period:
             start_date = end_date = min_date
         selected_period = f"{start_date} ~ {end_date}"
 
-    summary_df, detail_df = summarize_period(period_employee_id, start_date, end_date, attendance, daily_metrics, routes, attendance_event_flags)
+    summary_df, detail_df = summarize_period(
+        period_employee_id,
+        start_date,
+        end_date,
+        attendance,
+        daily_metrics,
+        routes,
+        attendance_event_flags,
+        daily_risk,
+    )
     period_months = months_in_range(start_date, end_date)
     period_monthly_claims = monthly_claim_comparison.loc[
         (monthly_claim_comparison["employee_id"] == period_employee_id)
@@ -3554,6 +3635,9 @@ with tab_period:
         metric_row3[3].metric("實際加班率", f"{summary_row['實際加班率']:.2%}")
         metric_row4 = st.columns(4)
         metric_row4[0].metric("忘刷申請總次數", int(summary_row["忘刷申請總次數"]))
+        metric_row4[1].metric("需覆核點數", int(summary_row["需覆核點數"]))
+        metric_row4[2].metric("高風險點數", int(summary_row["高風險點數"]))
+        metric_row4[3].metric("僅居家附近軌跡天數", int(summary_row["僅居家附近軌跡天數"]))
 
         st.markdown("**報表摘要**")
         summary_show = summary_df.rename(columns={"總匹配院所次數": "匹配院所總次數"})
@@ -3637,6 +3721,11 @@ with tab_period:
                     "有效外勤分鐘",
                     "預估總里程",
                     "預估公務里程",
+                    "覆核狀態",
+                    "需覆核點數",
+                    "高風險點數",
+                    "風險分數",
+                    "覆核原因摘要",
                     "未打卡未處理次數",
                     "忘刷申請次數",
                     "比對摘要",
@@ -3653,6 +3742,13 @@ with tab_period:
                     "總出勤分鐘": st.column_config.NumberColumn(format="%.1f"),
                     "有效外勤分鐘": st.column_config.NumberColumn(format="%.1f"),
                     "預估移動分鐘": st.column_config.NumberColumn(format="%.1f"),
+                    "風險分數": st.column_config.NumberColumn(format="%.0f"),
+                    "風險率": st.column_config.NumberColumn(format="%.2f"),
+                    "需覆核點數": st.column_config.NumberColumn(format="%d"),
+                    "高風險點數": st.column_config.NumberColumn(format="%d"),
+                    "住家附近打卡點數": st.column_config.NumberColumn(format="%d"),
+                    "離家最遠距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
+                    "外勤拜訪佐證數": st.column_config.NumberColumn(format="%d"),
                     "未打卡未處理次數": st.column_config.NumberColumn(format="%d"),
                     "未打卡已處理次數": st.column_config.NumberColumn(format="%d"),
                     "忘刷申請次數": st.column_config.NumberColumn(format="%d"),

@@ -1871,12 +1871,20 @@ def build_weekly_summary_cards(week_events: pd.DataFrame, week_start) -> list[di
         day_events = week_events.loc[week_events["work_date"].dt.date == current_date].copy()
         nearest_client = pick_nearest_place(day_events, "nearest_client_name", "nearest_client_meter")
         nearest_hospital = pick_nearest_place(day_events, "nearest_hospital_only_name", "nearest_hospital_only_meter")
+        risk_counts = (
+            day_events["risk_level"].fillna(NORMAL_LABEL).value_counts().to_dict()
+            if "risk_level" in day_events.columns
+            else {}
+        )
+        review_count = int(sum(risk_counts.get(level, 0) for level in [REVIEW_LABEL, HIGH_RISK_LABEL]))
         cards.append(
             {
                 "date": current_date,
                 "label": get_weekday_label(current_date),
                 "event_count": int(len(day_events)),
                 "gps_event_count": int(day_events["gps_lat"].notna().sum()) if "gps_lat" in day_events.columns else 0,
+                "review_count": review_count,
+                "risk_counts": risk_counts,
                 "nearest_client": nearest_client,
                 "nearest_hospital": nearest_hospital,
                 "selected_stops": summarize_selected_stops(day_events),
@@ -1923,6 +1931,7 @@ def render_weekly_summary_cards(cards: list[dict[str, object]]) -> None:
         <div class="weekly-day-card">
             <div class="weekly-day-title">{card['label']}</div>
             <div class="weekly-day-sub">{card['date']} | 打卡 {card['event_count']} 點 / GPS {card['gps_event_count']} 點</div>
+            <div class="candidate-sub">需覆核點數：{card.get('review_count', 0)}</div>
             <div class="candidate-sub">最近既有客戶：{nearest_client_text}</div>
             <div class="candidate-sub">最近醫院：{nearest_hospital_text}</div>
             <div class="candidate-sub">系統選定院所</div>

@@ -2958,6 +2958,10 @@ def build_google_sheet_reference_payload(
         ("risk_level", NORMAL_LABEL),
         ("risk_score", 0),
         ("risk_reason_text", ""),
+        ("selected_rank", pd.NA),
+        ("selected_distance_m", pd.NA),
+        ("nearest_distance_m", pd.NA),
+        ("distance_gap_m", pd.NA),
     ]:
         if column not in detail_events.columns:
             detail_events[column] = default_value
@@ -3184,6 +3188,10 @@ def build_google_sheet_reference_payload(
             "risk_level",
             "risk_score",
             "risk_reason_text",
+            "selected_rank",
+            "selected_distance_m",
+            "nearest_distance_m",
+            "distance_gap_m",
         ]
     ].rename(
         columns={
@@ -3211,6 +3219,10 @@ def build_google_sheet_reference_payload(
             "risk_level": "覆核狀態",
             "risk_score": "風險分數",
             "risk_reason_text": "覆核原因",
+            "selected_rank": "系統選定候選排名",
+            "selected_distance_m": "系統選定風險距離(m)",
+            "nearest_distance_m": "最近候選風險距離(m)",
+            "distance_gap_m": "選定與最近距離差(m)",
         }
     )
     detail_sheet["日期"] = pd.to_datetime(detail_sheet["日期"], errors="coerce").dt.strftime("%Y-%m-%d")
@@ -3473,6 +3485,10 @@ with tab_daily:
             "risk_level",
             "risk_score",
             "risk_reason_text",
+            "selected_rank",
+            "selected_distance_m",
+            "nearest_distance_m",
+            "distance_gap_m",
         ]
     ].rename(
         columns={
@@ -3493,6 +3509,10 @@ with tab_daily:
             "risk_level": "覆核狀態",
             "risk_score": "風險分數",
             "risk_reason_text": "覆核原因",
+            "selected_rank": "系統選定候選排名",
+            "selected_distance_m": "系統選定風險距離(m)",
+            "nearest_distance_m": "最近候選風險距離(m)",
+            "distance_gap_m": "選定與最近距離差(m)",
         }
     )
     detail_tab, finance_tab = st.tabs(["當日事件明細", "當日財務摘要"])

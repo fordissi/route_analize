@@ -3973,14 +3973,17 @@ with tab_overview:
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
+            scatter_overview = overview_summary.copy()
+            scatter_overview["需覆核點數標記"] = scatter_overview["需覆核點數"].fillna(0).clip(lower=1)
             fig_scatter = px.scatter(
-                overview_summary,
+                scatter_overview,
                 x="異常率",
                 y="平均風險率",
-                size="需覆核點數",
+                size="需覆核點數標記",
                 color="department",
                 hover_name="employee_label",
                 labels={"異常率": "異常率", "平均風險率": "平均風險率", "department": "部門"},
+                hover_data={"需覆核點數": True, "需覆核點數標記": False},
             )
             fig_scatter.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(fig_scatter, width="stretch")
@@ -4001,6 +4004,22 @@ with tab_overview:
             fig_hours.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
             st.plotly_chart(fig_hours, width="stretch")
     with chart4:
+        st.markdown("**財務補貼總覽**")
+        if overview_summary.empty:
+            st.info("目前日期區間沒有資料。")
+        else:
+            fig_subsidy = px.bar(
+                overview_summary.sort_values("油資補貼", ascending=False),
+                x="employee_label",
+                y=["油資補貼", "維修補貼", "日當費"],
+                barmode="stack",
+                labels={"employee_label": "員工", "value": "金額", "variable": "補貼項目"},
+            )
+            fig_subsidy.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
+            st.plotly_chart(fig_subsidy, width="stretch")
+
+    risk_chart1, risk_chart2 = st.columns(2)
+    with risk_chart1:
         st.markdown("**員工風險排名**")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
@@ -4014,6 +4033,22 @@ with tab_overview:
             )
             fig_risk_rank.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
             st.plotly_chart(fig_risk_rank, width="stretch")
+    with risk_chart2:
+        st.markdown("**風險分數排名**")
+        if overview_summary.empty:
+            st.info("目前日期區間沒有資料。")
+        else:
+            fig_risk_score = px.bar(
+                overview_summary.sort_values("風險分數", ascending=True),
+                x="風險分數",
+                y="employee_label",
+                color="department",
+                orientation="h",
+                labels={"employee_label": "員工", "風險分數": "風險分數", "department": "部門"},
+                hover_data={"需覆核點數": True, "高風險點數": True, "平均風險率": ":.2f"},
+            )
+            fig_risk_score.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10))
+            st.plotly_chart(fig_risk_score, width="stretch")
 
     claim_chart1, claim_chart2 = st.columns(2)
     with claim_chart1:

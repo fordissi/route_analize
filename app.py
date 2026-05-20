@@ -1210,6 +1210,65 @@ def load_results():
     config = build_config()
     run_pipeline(config)
     base = config.cleaned_dir
+    event_risk_columns = [
+        "event_uid",
+        "attendance_uid",
+        "risk_level",
+        "risk_score",
+        "risk_reason_codes",
+        "risk_reason_text",
+        "selected_distance_m",
+        "nearest_distance_m",
+        "distance_gap_m",
+        "selected_rank",
+    ]
+    daily_risk_columns = [
+        "attendance_uid",
+        "employee_id",
+        "employee_name",
+        "department",
+        "work_date",
+        "gps_event_count",
+        "risk_score",
+        "risk_rate",
+        "review_event_count",
+        "high_risk_event_count",
+        "home_area_only_trace",
+        "home_start_end_without_field_trace",
+        "insufficient_route_evidence",
+        "home_near_event_count",
+        "max_distance_from_home_m",
+        "field_visit_count",
+        "risk_level",
+        "risk_reason_summary",
+    ]
+    employee_risk_columns = [
+        "employee_id",
+        "employee_name",
+        "department",
+        "attendance_days",
+        "gps_event_count",
+        "risk_score",
+        "risk_rate",
+        "review_rate",
+        "review_event_count",
+        "high_risk_event_count",
+        "home_area_only_days",
+        "home_start_end_without_field_days",
+        "insufficient_route_evidence_days",
+        "risk_level",
+    ]
+
+    def read_cleaned_csv(file_name: str, expected_columns: list[str]) -> pd.DataFrame:
+        path = base / file_name
+        if not path.exists():
+            return pd.DataFrame(columns=expected_columns)
+        dataframe = pd.read_csv(path, encoding="utf-8-sig")
+        for column in expected_columns:
+            if column not in dataframe.columns:
+                dataframe[column] = pd.NA
+        return dataframe
+
     attendance = pd.read_csv(base / "attendance_day_group.csv", encoding="utf-8-sig")
     routes = pd.read_csv(base / "daily_route_summary.csv", encoding="utf-8-sig")
     finance = pd.read_csv(base / "finance_audit_result.csv", encoding="utf-8-sig")
@@ -1219,6 +1278,9 @@ def load_results():
     hospitals = pd.read_csv(base / "hospital_master_clean.csv", encoding="utf-8-sig")
     clients = pd.read_csv(base / "client_master.csv", encoding="utf-8-sig")
     employees = pd.read_csv(base / "employee_master.csv", encoding="utf-8-sig")
+    event_risk = read_cleaned_csv("event_risk_review.csv", event_risk_columns)
+    daily_risk = read_cleaned_csv("daily_risk_summary.csv", daily_risk_columns)
+    employee_risk = read_cleaned_csv("employee_risk_summary.csv", employee_risk_columns)
 
     raw_events["work_date"] = pd.to_datetime(raw_events["work_date"], errors="coerce")
     attendance["work_date"] = pd.to_datetime(attendance["work_date"], errors="coerce")
@@ -1349,6 +1411,19 @@ def load_results():
     raw_events = raw_events.merge(nearest_match, on="event_uid", how="left")
     raw_events = raw_events.merge(nearest_client, on="event_uid", how="left")
     raw_events = raw_events.merge(nearest_hospital_only, on="event_uid", how="left")
+    if not event_risk.empty:
+        event_risk_merge_columns = [
+            "event_uid",
+            "risk_level",
+            "risk_score",
+            "risk_reason_codes",
+            "risk_reason_text",
+            "selected_distance_m",
+            "nearest_distance_m",
+            "distance_gap_m",
+            "selected_rank",
+        ]
+        raw_events = raw_events.merge(event_risk[event_risk_merge_columns], on="event_uid", how="left")
 
     return {
         "config": config,
@@ -1359,6 +1434,9 @@ def load_results():
         "raw_events": raw_events,
         "matches": match_enriched,
         "employees": employees,
+        "event_risk": event_risk,
+        "daily_risk": daily_risk,
+        "employee_risk": employee_risk,
         "google_route_summary": google_route_summary,
         "google_route_cache": google_route_cache,
         "google_route_cache_detail": google_route_cache_detail,
@@ -2847,6 +2925,9 @@ daily_metrics = tables["daily_metrics"]
 raw_events = tables["raw_events"]
 matches = tables["matches"]
 employees = tables["employees"]
+event_risk = tables["event_risk"]
+daily_risk = tables["daily_risk"]
+employee_risk = tables["employee_risk"]
 google_route_summary = tables["google_route_summary"]
 google_route_cache = tables["google_route_cache"]
 google_route_cache_detail = tables["google_route_cache_detail"]

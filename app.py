@@ -2870,6 +2870,7 @@ def build_google_sheet_reference_payload(
     daily_metrics: pd.DataFrame,
     routes: pd.DataFrame,
     finance: pd.DataFrame,
+    daily_risk: pd.DataFrame,
     raw_events: pd.DataFrame,
     matches: pd.DataFrame,
     employees: pd.DataFrame,
@@ -2908,11 +2909,37 @@ def build_google_sheet_reference_payload(
             "personal_overtime_flag",
         ],
     ].copy()
+    daily_risk_columns = [
+        "attendance_uid",
+        "risk_level",
+        "risk_score",
+        "risk_rate",
+        "review_event_count",
+        "high_risk_event_count",
+        "home_area_only_trace",
+        "home_start_end_without_field_trace",
+        "insufficient_route_evidence",
+        "home_near_event_count",
+        "max_distance_from_home_m",
+        "field_visit_count",
+        "risk_reason_summary",
+    ]
+    if daily_risk.empty:
+        risk_slice = pd.DataFrame(columns=daily_risk_columns)
+    else:
+        risk_slice = daily_risk.loc[
+            daily_risk["attendance_uid"].isin(attendance_slice["attendance_uid"])
+        ].copy()
+        for column in daily_risk_columns:
+            if column not in risk_slice.columns:
+                risk_slice[column] = pd.NA
+        risk_slice = risk_slice[daily_risk_columns]
 
     daily_export = attendance_slice.merge(metrics_slice, on="attendance_uid", how="left")
     daily_export = daily_export.merge(route_slice, on="attendance_uid", how="left")
     daily_export = daily_export.merge(finance_slice, on="attendance_uid", how="left")
     daily_export = daily_export.merge(flag_slice, on="attendance_uid", how="left")
+    daily_export = daily_export.merge(risk_slice, on="attendance_uid", how="left")
     daily_export["year_month"] = daily_export["work_date"].dt.strftime("%Y-%m")
     daily_export["出勤時段"] = daily_export.apply(
         lambda row: (
@@ -2927,6 +2954,13 @@ def build_google_sheet_reference_payload(
     daily_export["有效外勤時數"] = pd.to_numeric(daily_export["effective_field_minutes"], errors="coerce").fillna(0) / 60
 
     detail_events = raw_events.loc[raw_events["attendance_uid"].isin(attendance_slice["attendance_uid"])].copy()
+    for column, default_value in [
+        ("risk_level", NORMAL_LABEL),
+        ("risk_score", 0),
+        ("risk_reason_text", ""),
+    ]:
+        if column not in detail_events.columns:
+            detail_events[column] = default_value
     selected_event_detail = (
         matches.loc[matches["is_selected"] == 1, ["event_uid", "hospital_label", "beeline_meter", "selection_type"]]
         .drop_duplicates(subset=["event_uid"], keep="first")
@@ -3011,6 +3045,18 @@ def build_google_sheet_reference_payload(
             "forget_punch_application_count",
             "overtime_flag_bool",
             "actual_overtime_flag",
+            "risk_level",
+            "risk_score",
+            "risk_rate",
+            "review_event_count",
+            "high_risk_event_count",
+            "home_area_only_trace",
+            "home_start_end_without_field_trace",
+            "insufficient_route_evidence",
+            "home_near_event_count",
+            "max_distance_from_home_m",
+            "field_visit_count",
+            "risk_reason_summary",
             "最近既有客戶清單",
             "最近醫院清單",
             "系統選定院所清單",
@@ -3042,6 +3088,18 @@ def build_google_sheet_reference_payload(
             "forget_punch_application_count": "忘刷申請次數",
             "overtime_flag_bool": "超時出勤",
             "actual_overtime_flag": "實際加班",
+            "risk_level": "覆核狀態",
+            "risk_score": "風險分數",
+            "risk_rate": "風險率",
+            "review_event_count": "需覆核點數",
+            "high_risk_event_count": "高風險點數",
+            "home_area_only_trace": "僅居家附近軌跡",
+            "home_start_end_without_field_trace": "住家起訖但缺外勤軌跡",
+            "insufficient_route_evidence": "路線佐證不足",
+            "home_near_event_count": "住家附近打卡點數",
+            "max_distance_from_home_m": "離家最遠距離(m)",
+            "field_visit_count": "外勤拜訪佐證數",
+            "risk_reason_summary": "覆核原因代碼",
             "claimed_km": "實際月申請里程(km)",
             "difference_km": "月申請-預估差異(km)",
             "difference_rate": "月申請-預估差異率",
@@ -3056,6 +3114,8 @@ def build_google_sheet_reference_payload(
     daily_sheet["日期"] = pd.to_datetime(daily_sheet["日期"], errors="coerce").dt.strftime("%Y-%m-%d")
     for bool_col in ["超時出勤", "實際加班"]:
         daily_sheet[bool_col] = daily_sheet[bool_col].fillna(False).map({True: "是", False: "否"})
+    for bool_col in ["僅居家附近軌跡", "住家起訖但缺外勤軌跡", "路線佐證不足"]:
+        daily_sheet[bool_col] = pd.to_numeric(daily_sheet[bool_col], errors="coerce").fillna(0).gt(0).map({True: "是", False: "否"})
     daily_sheet["核定油費"] = ""
     daily_sheet["核定日當費"] = ""
     daily_sheet["核定狀態"] = ""
@@ -3077,6 +3137,12 @@ def build_google_sheet_reference_payload(
             忘刷申請次數=("忘刷申請次數", lambda s: int(pd.to_numeric(s, errors="coerce").fillna(0).sum())),
             超時出勤天數=("超時出勤", lambda s: int((pd.Series(s).astype(str) == "是").sum())),
             實際加班天數=("實際加班", lambda s: int((pd.Series(s).astype(str) == "是").sum())),
+            需覆核點數=("需覆核點數", lambda s: int(pd.to_numeric(s, errors="coerce").fillna(0).sum())),
+            高風險點數=("高風險點數", lambda s: int(pd.to_numeric(s, errors="coerce").fillna(0).sum())),
+            風險分數=("風險分數", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).sum(), 2)),
+            僅居家附近軌跡天數=("僅居家附近軌跡", lambda s: int((pd.Series(s).astype(str) == "是").sum())),
+            住家起訖但缺外勤軌跡天數=("住家起訖但缺外勤軌跡", lambda s: int((pd.Series(s).astype(str) == "是").sum())),
+            路線佐證不足天數=("路線佐證不足", lambda s: int((pd.Series(s).astype(str) == "是").sum())),
             實際月申請里程_km=("實際月申請里程(km)", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).max(), 2)),
             月申請減預估差異_km=("月申請-預估差異(km)", lambda s: round(pd.to_numeric(s, errors="coerce").fillna(0).max(), 2)),
             月申請減預估差異率=("月申請-預估差異率", lambda s: pd.to_numeric(s, errors="coerce").dropna().iloc[0] if not pd.to_numeric(s, errors="coerce").dropna().empty else np.nan),
@@ -3115,6 +3181,9 @@ def build_google_sheet_reference_payload(
             "selected_hospital_label_detail",
             "selected_hospital_meter_detail",
             "selected_hospital_type_detail",
+            "risk_level",
+            "risk_score",
+            "risk_reason_text",
         ]
     ].rename(
         columns={
@@ -3139,6 +3208,9 @@ def build_google_sheet_reference_payload(
             "selected_hospital_label_detail": "系統選定院所",
             "selected_hospital_meter_detail": "系統選定距離(m)",
             "selected_hospital_type_detail": "系統選定類型",
+            "risk_level": "覆核狀態",
+            "risk_score": "風險分數",
+            "risk_reason_text": "覆核原因",
         }
     )
     detail_sheet["日期"] = pd.to_datetime(detail_sheet["日期"], errors="coerce").dt.strftime("%Y-%m-%d")
@@ -4229,6 +4301,7 @@ with tab_overview:
                 daily_metrics=daily_metrics,
                 routes=routes,
                 finance=finance,
+                daily_risk=daily_risk,
                 raw_events=raw_events,
                 matches=matches,
                 employees=employees,

@@ -84,6 +84,25 @@ def test_distant_only_candidate_without_selection_is_not_reasonable() -> None:
     assert row["risk_score"] > 0
 
 
+def test_non_gps_events_are_not_scored_as_visit_risk() -> None:
+    raw_events = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "actual_time": "2026-05-08 08:08:04", "gps_lat": 24.7, "gps_lon": 121.7},
+            {"event_uid": "e2", "attendance_uid": "a1", "actual_time": "2026-05-08 18:08:04", "gps_lat": pd.NA, "gps_lon": pd.NA},
+        ]
+    )
+    matches = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "seq_no": 1, "candidate_rank": 1, "hospital_id": "h1", "hospital_label": "near clinic", "beeline_meter": 300.0, "is_selected": 1},
+        ]
+    )
+
+    result = RiskService(make_config()).build_event_risk(raw_events, matches, pd.DataFrame(), pd.DataFrame())
+
+    assert result["event_uid"].tolist() == ["e1"]
+    assert "e2" not in set(result["event_uid"])
+
+
 def test_nearby_candidate_conflict_is_low_confidence() -> None:
     matches = pd.DataFrame(
         [
@@ -148,9 +167,8 @@ def test_impossible_travel_pairs_skip_non_gps_events() -> None:
 
     result = RiskService(make_config()).build_event_risk(raw_events, matches, route_segments, pd.DataFrame())
 
-    clock_reasons = result.loc[result["event_uid"] == "clock", "risk_reason_codes"].iloc[0]
     e2_reasons = result.loc[result["event_uid"] == "e2", "risk_reason_codes"].iloc[0]
-    assert "impossible_travel_time" not in clock_reasons
+    assert "clock" not in set(result["event_uid"])
     assert "impossible_travel_time" in e2_reasons
 
 

@@ -92,9 +92,15 @@ class RiskService:
         if raw_events.empty:
             return pd.DataFrame(columns=EVENT_RISK_COLUMNS)
 
+        events = raw_events.copy()
+        if {"gps_lat", "gps_lon"}.issubset(events.columns):
+            events = events.dropna(subset=["gps_lat", "gps_lon"])
+        if events.empty:
+            return pd.DataFrame(columns=EVENT_RISK_COLUMNS)
+
         impossible_event_ids = self._impossible_travel_event_ids(raw_events, route_segments)
         rows = []
-        for _, event in raw_events.iterrows():
+        for _, event in events.iterrows():
             event_uid = event.get("event_uid")
             if matches.empty or "event_uid" not in matches.columns:
                 candidates = pd.DataFrame()

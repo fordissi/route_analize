@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as html_lib
 import json
 from io import StringIO
 from math import cos, log, radians
@@ -27,6 +28,7 @@ from google_routes_service import (
     rebuild_google_route_summary_from_cache,
     upsert_route_segment_exclusions,
 )
+from risk_service import HIGH_RISK_LABEL, LOW_CONFIDENCE_LABEL, NORMAL_LABEL, REVIEW_LABEL
 
 
 st.set_page_config(page_title="Function Route Report", layout="wide")
@@ -203,6 +205,46 @@ st.markdown(
         display: inline-block;
         background: #dbeafe;
         color: #1d4ed8;
+        border-radius: 999px;
+        padding: 0.12rem 0.5rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-left: 0.35rem;
+    }
+    .tag-risk-normal {
+        display: inline-block;
+        background: #dcfce7;
+        color: #166534;
+        border-radius: 999px;
+        padding: 0.12rem 0.5rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-left: 0.35rem;
+    }
+    .tag-risk-low {
+        display: inline-block;
+        background: #e0f2fe;
+        color: #0369a1;
+        border-radius: 999px;
+        padding: 0.12rem 0.5rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-left: 0.35rem;
+    }
+    .tag-risk-review {
+        display: inline-block;
+        background: #fef3c7;
+        color: #92400e;
+        border-radius: 999px;
+        padding: 0.12rem 0.5rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-left: 0.35rem;
+    }
+    .tag-risk-high {
+        display: inline-block;
+        background: #fee2e2;
+        color: #b91c1c;
         border-radius: 999px;
         padding: 0.12rem 0.5rem;
         font-size: 0.82rem;
@@ -730,6 +772,17 @@ def is_hospital_name(
 
 def chunked(items: list[dict], size: int) -> list[list[dict]]:
     return [items[index : index + size] for index in range(0, len(items), size)]
+
+
+def risk_tag_class(risk_level: object) -> str:
+    level = str(risk_level or "").strip()
+    if level == HIGH_RISK_LABEL:
+        return "tag-risk-high"
+    if level == REVIEW_LABEL:
+        return "tag-risk-review"
+    if level == LOW_CONFIDENCE_LABEL:
+        return "tag-risk-low"
+    return "tag-risk-normal"
 
 
 def build_attendance_event_flags(raw_events: pd.DataFrame) -> pd.DataFrame:
@@ -2114,6 +2167,10 @@ def build_candidate_panel(day_events: pd.DataFrame, matches: pd.DataFrame) -> li
     gps_events = day_events.dropna(subset=["gps_lat", "gps_lon"]).copy()
     if gps_events.empty:
         return []
+    risk_columns = ["risk_level", "risk_score", "risk_reason_text"]
+    for column in risk_columns:
+        if column not in gps_events.columns:
+            gps_events[column] = pd.NA
 
     candidates = matches.merge(
         gps_events[
@@ -2130,6 +2187,9 @@ def build_candidate_panel(day_events: pd.DataFrame, matches: pd.DataFrame) -> li
                 "nearest_hospital_meter",
                 "nearest_hospital_only_name",
                 "nearest_hospital_only_meter",
+                "risk_level",
+                "risk_score",
+                "risk_reason_text",
             ]
         ],
         on="event_uid",
@@ -2170,6 +2230,9 @@ def build_candidate_panel(day_events: pd.DataFrame, matches: pd.DataFrame) -> li
                 "selected_client_tag": first_row["selected_client_tag"],
                 "nearest_client_name": first_row["nearest_client_name"],
                 "nearest_client_meter": first_row["nearest_client_meter"],
+                "risk_level": first_row["risk_level"] if pd.notna(first_row["risk_level"]) else NORMAL_LABEL,
+                "risk_score": float(first_row["risk_score"]) if pd.notna(first_row["risk_score"]) else 0.0,
+                "risk_reason_text": first_row["risk_reason_text"] if pd.notna(first_row["risk_reason_text"]) else "",
                 "candidates": candidate_items,
             }
         )
@@ -2223,6 +2286,16 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
                     f"<span class=\"{tag_class}\">{item['tag']}</span></li>"
                 )
             selected_name = panel["selected_hospital_name"] or "未判定"
+            risk_level = panel.get("risk_level") or NORMAL_LABEL
+            risk_score = float(panel.get("risk_score") or 0)
+            risk_reason = str(panel.get("risk_reason_text") or "").strip()
+            risk_html = (
+                f'<div class="candidate-sub">覆核狀態：'
+                f'<span class="{risk_tag_class(risk_level)}">{html_lib.escape(str(risk_level))}</span>'
+                f"（{risk_score:.0f} 分）</div>"
+            )
+            if risk_reason:
+                risk_html += f'<div class="candidate-sub">覆核原因：{html_lib.escape(risk_reason)}</div>'
             html = f"""
             <div class="candidate-card">
                 <div class="candidate-title">#{panel['seq_no']} {panel['time']}</div>
@@ -2230,6 +2303,7 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
                 <div class="candidate-sub">最近既有客戶：{nearest_client_text}</div>
                 <div class="candidate-sub">最近醫院：{nearest_text}</div>
                 <div class="candidate-sub">系統選定：{selected_name}<span class="{selected_tag_class}">{selected_tag}</span></div>
+                {risk_html}
                 <ol class="candidate-list">
                     {''.join(list_items)}
                 </ol>
@@ -3173,6 +3247,14 @@ with tab_daily:
     candidate_panel = build_candidate_panel(day_events, matches)
     render_candidate_cards(candidate_panel)
 
+    for risk_column, default_value in [
+        ("risk_level", NORMAL_LABEL),
+        ("risk_score", 0),
+        ("risk_reason_text", ""),
+    ]:
+        if risk_column not in day_events.columns:
+            day_events[risk_column] = default_value
+
     event_detail = day_events[
         [
             "actual_time_display",
@@ -3189,6 +3271,9 @@ with tab_daily:
             "nearest_hospital_only_meter",
             "selected_hospital_name",
             "selected_client_tag",
+            "risk_level",
+            "risk_score",
+            "risk_reason_text",
         ]
     ].rename(
         columns={
@@ -3204,8 +3289,11 @@ with tab_daily:
             "nearest_hospital_meter": "最近院所距離(公尺)",
             "nearest_hospital_only_name": "最近醫院",
             "nearest_hospital_only_meter": "最近醫院距離(公尺)",
-            "selected_hospital_name": "預估院所",
-            "selected_client_tag": "院所類型",
+            "selected_hospital_name": "系統選定院所",
+            "selected_client_tag": "客戶類型",
+            "risk_level": "覆核狀態",
+            "risk_score": "風險分數",
+            "risk_reason_text": "覆核原因",
         }
     )
     detail_tab, finance_tab = st.tabs(["當日事件明細", "當日財務摘要"])
@@ -3223,6 +3311,9 @@ with tab_daily:
                 "最近醫院距離(公尺)",
                 "系統選定院所",
                 "客戶類型",
+                "覆核狀態",
+                "風險分數",
+                "覆核原因",
             ],
         )
         st.dataframe(
@@ -3235,6 +3326,7 @@ with tab_daily:
                 "最近既有客戶距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
                 "最近院所距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
                 "最近醫院距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
+                "風險分數": st.column_config.NumberColumn(format="%.0f"),
             },
         )
     with finance_tab:

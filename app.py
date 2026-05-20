@@ -3564,7 +3564,7 @@ with tab_daily:
             ].rename(
                 columns={
                     "employee_label": "員工",
-                    "employee_claim_km": "月申請里程",
+                    "employee_claim_km": "所屬月份申請總里程",
                     "approved_business_km": "當日公務里程",
                     "audit_light": "燈號",
                     "fuel_subsidy": "油資補貼",
@@ -3573,6 +3573,7 @@ with tab_daily:
                     "audit_status": "審核狀態",
                 }
             )
+            st.caption("申請里程目前為整月匯入值；此表逐日顯示時會重複呈現同一月份申請總里程，不代表該日申請里程。")
             render_print_table(day_finance_view)
             st.dataframe(
                 day_finance_view,
@@ -3923,7 +3924,7 @@ with tab_period:
             columns={
                 "work_date": "日期",
                 "employee_label": "員工",
-                "employee_claim_km": "月申請里程",
+                "employee_claim_km": "所屬月份申請總里程",
                 "approved_business_km": "當日公務里程",
                 "audit_light": "燈號",
                 "fuel_subsidy": "油資補貼",
@@ -3933,11 +3934,12 @@ with tab_period:
             }
         )
         st.markdown("**期間財務明細**")
+        st.caption("申請里程目前為整月匯入值；此表逐日顯示時會重複呈現同一月份申請總里程，不代表該日申請里程。")
         render_print_table(
             finance_detail,
             [
                 "日期",
-                "月申請里程",
+                "所屬月份申請總里程",
                 "當日公務里程",
                 "燈號",
                 "油資補貼",
@@ -3951,7 +3953,7 @@ with tab_period:
             width="stretch",
             hide_index=True,
             column_config={
-                "月申請里程": st.column_config.NumberColumn(format="%.2f km"),
+                "所屬月份申請總里程": st.column_config.NumberColumn(format="%.2f km"),
                 "當日公務里程": st.column_config.NumberColumn(format="%.2f km"),
                 "油資補貼": st.column_config.NumberColumn(format="%.2f"),
                 "維修補貼": st.column_config.NumberColumn(format="%.2f"),

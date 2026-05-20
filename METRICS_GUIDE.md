@@ -331,3 +331,28 @@
 - 燈號閾值
 
 目前為唯讀顯示頁，尚未支援 UI 直接修改後寫回設定檔。
+
+## 7. 申報里程粒度說明
+
+### `monthly_claims.csv`
+- 目前正式使用的申報里程來源。
+- `claimed_km` 代表員工在 `year_month` 所屬月份的整月申請總里程。
+- 系統比較方式固定為月層級：`monthly_claims.csv.claimed_km` vs 同員工同月份 `daily_route_summary.estimated_business_km` 加總。
+- 當月申請里程顯示在每日或個人期間明細時，同一月份內會重複呈現相同的整月值，僅供對照，不代表該日申請里程。
+
+### `daily_claims.csv`（預留）
+- `work_date`
+- `employee_id`
+- `claimed_km`
+- `claim_source`
+- `submitted_at`
+- `remark`
+
+每日申報里程匯入後，才能進行 `日申報里程 vs 當日公務里程` 的日層級比對。月申報里程仍維持月層級比對。
+
+### 預留每日申報風險代碼
+- `daily_claim_variance_high`：每日申報里程與當日預估公務里程有明顯差異。
+- `daily_claim_without_route_evidence`：有每日申報里程，但 GPS 或路線佐證不足。
+- `home_trace_with_daily_claim`：當日僅有住家附近軌跡，但仍有非低量每日申報里程。
+
+以上代碼只作為後續每日申報匯入功能的契約，現階段不啟用，也不會用整月申報里程去判定單日風險。

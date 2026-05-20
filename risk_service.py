@@ -240,7 +240,11 @@ class RiskService:
         if not {"employee_id", "home_lat", "home_lon"}.issubset(employees.columns):
             return pd.DataFrame(columns=columns)
 
-        employee_home = employees.dropna(subset=["home_lat", "home_lon"])[["employee_id", "home_lat", "home_lon"]].copy()
+        employee_home = (
+            employees.dropna(subset=["home_lat", "home_lon"])[["employee_id", "home_lat", "home_lon"]]
+            .drop_duplicates(subset=["employee_id"], keep="first")
+            .copy()
+        )
         if employee_home.empty:
             return pd.DataFrame(columns=columns)
 
@@ -256,17 +260,29 @@ class RiskService:
         )
         events["near_home"] = events["distance_from_home_m"] <= float(self.config.risk_home_radius_m)
 
-        selected_matches = pd.DataFrame(columns=["event_uid", "field_visit_evidence"])
-        if matches is not None and not matches.empty and {"event_uid", "is_selected", "beeline_meter"}.issubset(matches.columns):
-            selected = matches[self._as_bool_series(matches["is_selected"])].copy()
-            selected["beeline_meter"] = pd.to_numeric(selected["beeline_meter"], errors="coerce")
-            selected_matches = selected.loc[
-                selected["beeline_meter"].le(float(self.config.risk_review_distance_m)),
+        match_evidence = pd.DataFrame(columns=["event_uid", "field_visit_evidence"])
+        if matches is not None and not matches.empty and {"event_uid", "beeline_meter"}.issubset(matches.columns):
+            evidence = matches.copy()
+            evidence["beeline_meter"] = pd.to_numeric(evidence["beeline_meter"], errors="coerce")
+            selected_evidence = (
+                self._as_bool_series(evidence["is_selected"])
+                if "is_selected" in evidence.columns
+                else pd.Series(False, index=evidence.index)
+            )
+            rank_evidence = (
+                pd.to_numeric(evidence["candidate_rank"], errors="coerce").eq(1)
+                if "candidate_rank" in evidence.columns
+                else pd.Series(False, index=evidence.index)
+            )
+            match_evidence = evidence.loc[
+                evidence["beeline_meter"].le(float(self.config.risk_review_distance_m))
+                & (selected_evidence | rank_evidence),
                 ["event_uid"],
             ].drop_duplicates()
-            selected_matches["field_visit_evidence"] = 1
-        events = events.merge(selected_matches, on="event_uid", how="left")
+            match_evidence["field_visit_evidence"] = 1
+        events = events.merge(match_evidence, on="event_uid", how="left")
         events["field_visit_evidence"] = pd.to_numeric(events["field_visit_evidence"], errors="coerce").fillna(0).astype(int)
+        events.loc[events["near_home"], "field_visit_evidence"] = 0
 
         sort_columns = ["attendance_uid"]
         if "actual_time" in events.columns:

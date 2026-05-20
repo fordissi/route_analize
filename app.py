@@ -2559,6 +2559,7 @@ def build_overview_summary(
     routes: pd.DataFrame,
     finance: pd.DataFrame,
     event_flags: pd.DataFrame,
+    daily_risk: pd.DataFrame,
     start_date,
     end_date,
 ) -> pd.DataFrame:
@@ -2566,11 +2567,30 @@ def build_overview_summary(
     metrics_mask = daily_metrics["work_date"].dt.date.between(start_date, end_date)
     routes_mask = routes["work_date"].dt.date.between(start_date, end_date)
     finance_mask = finance["work_date"].dt.date.between(start_date, end_date)
+    risk_columns = [
+        "attendance_uid",
+        "risk_score",
+        "risk_rate",
+        "review_event_count",
+        "high_risk_event_count",
+        "home_area_only_trace",
+        "home_start_end_without_field_trace",
+        "insufficient_route_evidence",
+    ]
 
     base = attendance.loc[attendance_mask].copy()
     metrics = daily_metrics.loc[metrics_mask, ["attendance_uid", "raw_span_minutes", "effective_field_minutes", "anomaly_flag", "gps_event_count"]]
     route_slice = routes.loc[routes_mask, ["attendance_uid", "estimated_total_km", "estimated_business_km", "estimated_travel_min", "route_confidence"]]
     finance_slice = finance.loc[finance_mask, ["attendance_uid", "audit_light", "fuel_subsidy", "maintenance_subsidy", "per_diem_amount"]]
+    if daily_risk.empty:
+        risk_slice = pd.DataFrame(columns=risk_columns)
+    else:
+        risk_mask = daily_risk["work_date"].dt.date.between(start_date, end_date)
+        risk_slice = daily_risk.loc[risk_mask].copy()
+        for column in risk_columns:
+            if column not in risk_slice.columns:
+                risk_slice[column] = pd.NA
+        risk_slice = risk_slice[risk_columns]
     event_flag_slice = event_flags[
         [
             "attendance_uid",
@@ -2585,9 +2605,20 @@ def build_overview_summary(
     merged = base.merge(metrics, on="attendance_uid", how="left", suffixes=("", "_metric"))
     merged = merged.merge(route_slice, on="attendance_uid", how="left")
     merged = merged.merge(finance_slice, on="attendance_uid", how="left")
+    merged = merged.merge(risk_slice, on="attendance_uid", how="left")
     merged = merged.merge(event_flag_slice, on="attendance_uid", how="left")
     for column in ["overtime_flag_bool", "actual_overtime_flag", "personal_overtime_flag"]:
         merged[column] = merged[column].fillna(False).astype(bool)
+    for column in [
+        "risk_score",
+        "risk_rate",
+        "review_event_count",
+        "high_risk_event_count",
+        "home_area_only_trace",
+        "home_start_end_without_field_trace",
+        "insufficient_route_evidence",
+    ]:
+        merged[column] = pd.to_numeric(merged[column], errors="coerce").fillna(0)
 
     summary = (
         merged.groupby(["employee_id", "employee_label", "department"], dropna=False)
@@ -2599,6 +2630,13 @@ def build_overview_summary(
             總計預估里程=("estimated_total_km", lambda s: round(s.fillna(0).sum(), 2)),
             總計預估公務里程=("estimated_business_km", lambda s: round(s.fillna(0).sum(), 2)),
             未打卡未處理次數=("missing_punch_unprocessed_count", lambda s: int(s.fillna(0).sum())),
+            需覆核點數=("review_event_count", lambda s: int(s.fillna(0).sum())),
+            高風險點數=("high_risk_event_count", lambda s: int(s.fillna(0).sum())),
+            風險分數=("risk_score", lambda s: round(s.fillna(0).sum(), 2)),
+            平均風險率=("risk_rate", lambda s: round(s.fillna(0).mean(), 4)),
+            僅居家附近軌跡天數=("home_area_only_trace", lambda s: int((s.fillna(0) > 0).sum())),
+            住家起訖但缺外勤軌跡天數=("home_start_end_without_field_trace", lambda s: int((s.fillna(0) > 0).sum())),
+            路線佐證不足天數=("insufficient_route_evidence", lambda s: int((s.fillna(0) > 0).sum())),
             平均路徑信心=("route_confidence", lambda s: round(s.fillna(0).mean(), 4)),
             異常率=("anomaly_flag", lambda s: round(float(s.fillna(False).mean()), 4)),
             超時出勤率=("overtime_flag_bool", lambda s: round(float(s.fillna(False).mean()), 4)),
@@ -2608,7 +2646,7 @@ def build_overview_summary(
             日當費=("per_diem_amount", lambda s: round(s.fillna(0).sum(), 2)),
         )
         .reset_index()
-        .sort_values(["總計預估里程", "異常率"], ascending=[False, False])
+        .sort_values(["平均風險率", "風險分數", "總計預估里程"], ascending=[False, False, False])
     )
     return summary
 
@@ -3853,6 +3891,7 @@ with tab_overview:
         routes,
         finance,
         attendance_event_flags,
+        daily_risk,
         overview_start_date,
         overview_end_date,
     )
@@ -3905,8 +3944,13 @@ with tab_overview:
     top_row = st.columns(4)
     top_row[0].metric("全員總計預估里程", f"{overview_summary['總計預估里程'].sum():.2f} km")
     top_row[1].metric("全員總計公務里程", f"{overview_summary['總計預估公務里程'].sum():.2f} km")
-    top_row[2].metric("平均異常率", f"{overview_summary['異常率'].mean():.2%}" if not overview_summary.empty else "0.00%")
-    top_row[3].metric("平均超時率", f"{overview_summary['超時出勤率'].mean():.2%}" if not overview_summary.empty else "0.00%")
+    top_row[2].metric("需覆核點數", int(overview_summary["需覆核點數"].fillna(0).sum()) if not overview_summary.empty else 0)
+    top_row[3].metric("高風險點數", int(overview_summary["高風險點數"].fillna(0).sum()) if not overview_summary.empty else 0)
+    risk_top_row = st.columns(4)
+    risk_top_row[0].metric("平均異常率", f"{overview_summary['異常率'].mean():.2%}" if not overview_summary.empty else "0.00%")
+    risk_top_row[1].metric("平均超時率", f"{overview_summary['超時出勤率'].mean():.2%}" if not overview_summary.empty else "0.00%")
+    risk_top_row[2].metric("平均風險率", f"{overview_summary['平均風險率'].mean():.2f}" if not overview_summary.empty else "0.00")
+    risk_top_row[3].metric("僅居家附近軌跡天數", int(overview_summary["僅居家附近軌跡天數"].fillna(0).sum()) if not overview_summary.empty else 0)
 
     chart1, chart2 = st.columns(2)
     with chart1:
@@ -3925,18 +3969,18 @@ with tab_overview:
             fig_km.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
             st.plotly_chart(fig_km, width="stretch")
     with chart2:
-        st.markdown("**異常率 vs 超時出勤率**")
+        st.markdown("**風險率 vs 異常率**")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
             fig_scatter = px.scatter(
                 overview_summary,
                 x="異常率",
-                y="超時出勤率",
-                size="總計預估里程",
+                y="平均風險率",
+                size="需覆核點數",
                 color="department",
                 hover_name="employee_label",
-                labels={"異常率": "異常率", "超時出勤率": "超時出勤率", "department": "部門"},
+                labels={"異常率": "異常率", "平均風險率": "平均風險率", "department": "部門"},
             )
             fig_scatter.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(fig_scatter, width="stretch")
@@ -3957,19 +4001,19 @@ with tab_overview:
             fig_hours.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
             st.plotly_chart(fig_hours, width="stretch")
     with chart4:
-        st.markdown("**財務補貼總覽**")
+        st.markdown("**員工風險排名**")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
-            fig_subsidy = px.bar(
-                overview_summary.sort_values("油資補貼", ascending=False),
+            fig_risk_rank = px.bar(
+                overview_summary.sort_values("風險分數", ascending=False),
                 x="employee_label",
-                y=["油資補貼", "維修補貼", "日當費"],
-                barmode="stack",
-                labels={"employee_label": "員工", "value": "金額", "variable": "補貼項目"},
+                y=["需覆核點數", "高風險點數", "僅居家附近軌跡天數"],
+                barmode="group",
+                labels={"employee_label": "員工", "value": "數量", "variable": "指標"},
             )
-            fig_subsidy.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
-            st.plotly_chart(fig_subsidy, width="stretch")
+            fig_risk_rank.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
+            st.plotly_chart(fig_risk_rank, width="stretch")
 
     claim_chart1, claim_chart2 = st.columns(2)
     with claim_chart1:
@@ -4099,6 +4143,11 @@ with tab_overview:
             "總計預估里程",
             "總計預估公務里程",
             "未打卡未處理次數",
+            "需覆核點數",
+            "高風險點數",
+            "風險分數",
+            "平均風險率",
+            "僅居家附近軌跡天數",
             "異常率",
             "超時出勤率",
             "油資補貼",
@@ -4115,6 +4164,11 @@ with tab_overview:
             "總計預估公務里程": st.column_config.NumberColumn(format="%.2f km"),
             "平均路徑信心": st.column_config.NumberColumn(format="%.2f"),
             "未打卡未處理次數": st.column_config.NumberColumn(format="%d"),
+            "需覆核點數": st.column_config.NumberColumn(format="%d"),
+            "高風險點數": st.column_config.NumberColumn(format="%d"),
+            "風險分數": st.column_config.NumberColumn(format="%.0f"),
+            "平均風險率": st.column_config.NumberColumn(format="%.2f"),
+            "僅居家附近軌跡天數": st.column_config.NumberColumn(format="%d"),
             "異常率": st.column_config.NumberColumn(format="%.2%"),
             "超時出勤率": st.column_config.NumberColumn(format="%.2%"),
             "實際加班率": st.column_config.NumberColumn(format="%.2%"),

@@ -116,6 +116,57 @@ CREATE TABLE IF NOT EXISTS route_stop_match (
     created_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS event_risk_review (
+    event_uid TEXT PRIMARY KEY,
+    attendance_uid TEXT,
+    risk_level TEXT,
+    risk_score REAL,
+    risk_reason_codes TEXT,
+    risk_reason_text TEXT,
+    selected_distance_m REAL,
+    nearest_distance_m REAL,
+    distance_gap_m REAL,
+    selected_rank INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS daily_risk_summary (
+    attendance_uid TEXT PRIMARY KEY,
+    employee_id TEXT,
+    employee_name TEXT,
+    department TEXT,
+    work_date TEXT,
+    gps_event_count INTEGER,
+    risk_score REAL,
+    risk_rate REAL,
+    review_event_count INTEGER,
+    high_risk_event_count INTEGER,
+    home_area_only_trace INTEGER,
+    home_start_end_without_field_trace INTEGER,
+    insufficient_route_evidence INTEGER,
+    home_near_event_count INTEGER,
+    max_distance_from_home_m REAL,
+    field_visit_count INTEGER,
+    risk_level TEXT,
+    risk_reason_summary TEXT
+);
+
+CREATE TABLE IF NOT EXISTS employee_risk_summary (
+    employee_id TEXT PRIMARY KEY,
+    employee_name TEXT,
+    department TEXT,
+    attendance_days INTEGER,
+    gps_event_count INTEGER,
+    risk_score REAL,
+    risk_rate REAL,
+    review_rate REAL,
+    review_event_count INTEGER,
+    high_risk_event_count INTEGER,
+    home_area_only_days INTEGER,
+    home_start_end_without_field_days INTEGER,
+    insufficient_route_evidence_days INTEGER,
+    risk_level TEXT
+);
+
 CREATE TABLE IF NOT EXISTS daily_route_summary (
     attendance_uid TEXT PRIMARY KEY,
     route_mode TEXT,
@@ -219,6 +270,12 @@ CREATE TABLE IF NOT EXISTS route_segment_exclusion (
 );
 """
 
+SCHEMA_PRESERVED_TABLES = {
+    "event_risk_review",
+    "daily_risk_summary",
+    "employee_risk_summary",
+}
+
 
 class DatabaseManager:
     def __init__(self, db_path: str | Path):
@@ -238,6 +295,10 @@ class DatabaseManager:
             self._migrate_route_tables(conn)
 
     def replace_table(self, conn: sqlite3.Connection, table_name: str, dataframe) -> None:
+        if table_name in SCHEMA_PRESERVED_TABLES:
+            conn.execute(f"DELETE FROM {table_name}")
+            dataframe.to_sql(table_name, conn, if_exists="append", index=False)
+            return
         dataframe.to_sql(table_name, conn, if_exists="replace", index=False)
 
     def execute(self, conn: sqlite3.Connection, sql: str, params: tuple = ()) -> None:

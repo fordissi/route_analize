@@ -2633,7 +2633,6 @@ def build_overview_summary(
             需覆核點數=("review_event_count", lambda s: int(s.fillna(0).sum())),
             高風險點數=("high_risk_event_count", lambda s: int(s.fillna(0).sum())),
             風險分數=("risk_score", lambda s: round(s.fillna(0).sum(), 2)),
-            平均風險率=("risk_rate", lambda s: round(s.fillna(0).mean(), 4)),
             僅居家附近軌跡天數=("home_area_only_trace", lambda s: int((s.fillna(0) > 0).sum())),
             住家起訖但缺外勤軌跡天數=("home_start_end_without_field_trace", lambda s: int((s.fillna(0) > 0).sum())),
             路線佐證不足天數=("insufficient_route_evidence", lambda s: int((s.fillna(0) > 0).sum())),
@@ -2646,8 +2645,9 @@ def build_overview_summary(
             日當費=("per_diem_amount", lambda s: round(s.fillna(0).sum(), 2)),
         )
         .reset_index()
-        .sort_values(["平均風險率", "風險分數", "總計預估里程"], ascending=[False, False, False])
     )
+    summary["平均風險率"] = (summary["風險分數"] / summary["總GPS點數"].clip(lower=1)).round(4)
+    summary = summary.sort_values(["平均風險率", "風險分數", "總計預估里程"], ascending=[False, False, False])
     return summary
 
 

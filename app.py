@@ -175,6 +175,9 @@ st.markdown(
         box-shadow: 0 10px 24px rgba(15,23,42,0.05);
         overflow-wrap: anywhere;
     }
+    .route-context-card {
+        margin-bottom: 1.45rem;
+    }
     .daily-map-card {
         background: rgba(255,255,255,0.96);
         border: 1px solid rgba(15,23,42,0.08);
@@ -3590,7 +3593,7 @@ with tab_daily:
         day_google_segments = pd.DataFrame()
     filter_col3.markdown(
         f"""
-        <div class="section-card" style="padding:0.85rem 1rem;">
+        <div class="section-card route-context-card" style="padding:0.85rem 1rem;">
             <div class="candidate-title">{selected_employee_label}</div>
             <div class="candidate-sub">日期：{selected_date}</div>
             <div class="candidate-sub">當日事件數：{len(day_events)}</div>
@@ -3830,7 +3833,7 @@ with tab_weekly:
 
     week_col3.markdown(
         f"""
-        <div class="section-card" style="padding:0.85rem 1rem;">
+        <div class="section-card route-context-card" style="padding:0.85rem 1rem;">
             <div class="candidate-title">{weekly_employee_label}</div>
             <div class="candidate-sub">{selected_week if weekly_options else '無可用週次'} | {week_start} ~ {week_end}</div>
             <div class="candidate-sub">出勤 {int(week_attendance['attendance_uid'].nunique()) if not week_attendance.empty else 0} 天 / GPS {int(week_events['gps_lat'].notna().sum()) if isinstance(week_events, pd.DataFrame) and 'gps_lat' in week_events.columns else 0} 點</div>

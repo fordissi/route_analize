@@ -688,7 +688,7 @@ def load_google_route_cache_detail(db_path: str | Path) -> pd.DataFrame:
             return pd.read_sql_query(
                 """
                 SELECT cache_key, attendance_uid, attendance_key, segment_no, segment_type, polyline, distance_meters,
-                       duration_seconds, status, error_message, calculated_at
+                       duration_seconds, status, error_message, api_provider, calculated_at
                 FROM google_route_cache
                 ORDER BY attendance_uid, segment_no, calculated_at DESC
                 """,
@@ -696,3 +696,28 @@ def load_google_route_cache_detail(db_path: str | Path) -> pd.DataFrame:
             )
         except Exception:  # noqa: BLE001
             return pd.DataFrame()
+
+
+def add_route_cache_diagnostic_flags(cache_detail: pd.DataFrame) -> pd.DataFrame:
+    diagnostics = cache_detail.copy()
+    for column in ["polyline", "status", "api_provider"]:
+        if column not in diagnostics.columns:
+            diagnostics[column] = pd.NA
+
+    diagnostics["has_polyline"] = diagnostics["polyline"].astype("string").fillna("").str.len() > 0
+    diagnostics["status"] = diagnostics["status"].astype("string")
+    diagnostics["api_provider"] = diagnostics["api_provider"].astype("string")
+    diagnostics["is_error"] = diagnostics["status"].eq("error")
+    diagnostics["is_ok"] = diagnostics["status"].eq("ok")
+    diagnostics["is_api_success"] = (
+        diagnostics["is_ok"]
+        & diagnostics["has_polyline"]
+        & diagnostics["api_provider"].eq("google_routes_api")
+    )
+    diagnostics["is_cache_success"] = (
+        diagnostics["is_ok"]
+        & diagnostics["has_polyline"]
+        & ~diagnostics["is_api_success"]
+    )
+    diagnostics["is_missing_polyline"] = diagnostics["is_ok"] & ~diagnostics["has_polyline"]
+    return diagnostics

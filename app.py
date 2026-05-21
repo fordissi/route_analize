@@ -19,6 +19,7 @@ from pipeline import run_pipeline
 from settings import build_config, config_to_editable_dict, save_user_settings
 from google_routes_service import (
     build_attendance_segments,
+    add_route_cache_diagnostic_flags,
     compute_and_cache_routes,
     estimate_monthly_usage,
     load_google_route_cache,
@@ -1102,27 +1103,43 @@ def build_google_routes_diagnostics(
             )
         else:
             cache_detail = pd.DataFrame(
-                columns=["attendance_key", "segment_no", "segment_type", "polyline", "status", "error_message", "calculated_at"]
+                columns=[
+                    "attendance_key",
+                    "segment_no",
+                    "segment_type",
+                    "polyline",
+                    "status",
+                    "error_message",
+                    "api_provider",
+                    "calculated_at",
+                ]
             )
 
         merged = expected_df.merge(
             cache_detail[
-                ["attendance_key", "segment_no", "segment_type", "polyline", "status", "error_message", "calculated_at"]
+                [
+                    "attendance_key",
+                    "segment_no",
+                    "segment_type",
+                    "polyline",
+                    "status",
+                    "error_message",
+                    "api_provider",
+                    "calculated_at",
+                ]
             ],
             on=["attendance_key", "segment_no", "segment_type"],
             how="left",
         )
-        merged["has_polyline"] = merged["polyline"].astype("string").fillna("").str.len() > 0
-        merged["status"] = merged["status"].astype("string")
-        merged["is_error"] = merged["status"].eq("error")
-        merged["is_ok"] = merged["status"].eq("ok")
-        merged["is_missing_polyline"] = merged["is_ok"] & ~merged["has_polyline"]
+        merged = add_route_cache_diagnostic_flags(merged)
 
         aggregated = (
             merged.groupby("attendance_key", dropna=False)
             .agg(
                 expected_segments=("segment_no", "count"),
                 cache_rows=("status", lambda values: int(values.notna().sum())),
+                api_success_segments=("is_api_success", lambda values: int(values.sum())),
+                cache_hit_segments=("is_cache_success", lambda values: int(values.sum())),
                 failed_segments=("is_error", lambda values: int(values.sum())),
                 missing_polyline_segments=("is_missing_polyline", lambda values: int(values.sum())),
                 usable_polyline_segments=("has_polyline", lambda values: int(values.sum())),
@@ -1148,6 +1165,8 @@ def build_google_routes_diagnostics(
             "failed_segments",
             "missing_polyline_segments",
             "usable_polyline_segments",
+            "api_success_segments",
+            "cache_hit_segments",
             "cached_segment_count",
             "api_segment_count",
             "segment_count",
@@ -1157,13 +1176,6 @@ def build_google_routes_diagnostics(
                 .fillna(0)
                 .astype(int)
             )
-
-        diagnostics["api_success_segments"] = diagnostics["api_segment_count"]
-        diagnostics["cache_hit_segments"] = np.where(
-            diagnostics["cached_segment_count"] > 0,
-            diagnostics["cached_segment_count"],
-            diagnostics["usable_polyline_segments"],
-        )
 
         def classify(row: pd.Series) -> str:
             if row["failed_segments"] > 0:
@@ -4954,8 +4966,8 @@ with tab_routes_api:
     else:
         diag_metric_cols = st.columns(5)
         diag_metric_cols[0].metric("出勤群組", len(diagnostics_df))
-        diag_metric_cols[1].metric("API 成功", int((diagnostics_df["診斷結果"] == "API 成功").sum()))
-        diag_metric_cols[2].metric("只命中快取", int((diagnostics_df["診斷結果"] == "只命中快取").sum()))
+        diag_metric_cols[1].metric("API 成功段數", int(diagnostics_df["API 成功段數"].fillna(0).sum()))
+        diag_metric_cols[2].metric("只命中快取群組", int((diagnostics_df["診斷結果"] == "只命中快取").sum()))
         diag_metric_cols[3].metric("有 API 失敗", int((diagnostics_df["失敗段數"] > 0).sum()))
         diag_metric_cols[4].metric("缺 polyline", int((diagnostics_df["缺 polyline 段數"] > 0).sum()))
 
@@ -4963,7 +4975,7 @@ with tab_routes_api:
         diag_tabs = st.tabs(diag_labels)
         diag_filters = [
             diagnostics_df,
-            diagnostics_df.loc[diagnostics_df["診斷結果"] == "API 成功"],
+            diagnostics_df.loc[diagnostics_df["API 成功段數"] > 0],
             diagnostics_df.loc[diagnostics_df["診斷結果"] == "只命中快取"],
             diagnostics_df.loc[diagnostics_df["失敗段數"] > 0],
             diagnostics_df.loc[diagnostics_df["缺 polyline 段數"] > 0],

@@ -47,20 +47,42 @@ st.markdown(
         padding-bottom: 2rem;
         max-width: 1500px;
     }
+    div[data-testid="stHorizontalBlock"] {
+        row-gap: 0.85rem;
+    }
+    div[data-testid="stColumn"] {
+        min-width: 0;
+    }
     div[data-testid="stMetric"] {
         background: rgba(255, 255, 255, 0.98);
         border: 1px solid rgba(15, 23, 42, 0.08);
-        border-radius: 16px;
-        padding: 0.8rem 1rem;
+        border-radius: 12px;
+        padding: 0.85rem 0.95rem;
+        min-height: 104px;
+        overflow: visible;
         box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
     }
     div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {
         color: #0f172a !important;
     }
+    [data-testid="stMetricLabel"] p {
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+        word-break: normal;
+        line-height: 1.25;
+    }
+    [data-testid="stMetricValue"] {
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+        word-break: normal;
+        line-height: 1.18 !important;
+        font-variant-numeric: tabular-nums;
+    }
     div[data-testid="stDataFrame"] {
         background: rgba(255, 255, 255, 0.96);
-        border-radius: 16px;
-        padding: 0.35rem;
+        border-radius: 12px;
+        padding: 0.45rem;
+        overflow-x: auto;
     }
     label, [data-testid="stWidgetLabel"], .stMarkdown, .stCaption, .stText {
         color: #0f172a !important;
@@ -108,20 +130,24 @@ st.markdown(
         background: rgba(255,255,255,0.98);
         border: 1px solid rgba(15,23,42,0.08);
         border-left: 6px solid #0f766e;
-        border-radius: 16px;
-        padding: 0.9rem 1rem;
-        margin-bottom: 0.8rem;
+        border-radius: 12px;
+        padding: 1rem 1.05rem;
+        margin-bottom: 0.95rem;
         box-shadow: 0 10px 26px rgba(15,23,42,0.05);
+        overflow-wrap: anywhere;
     }
     .candidate-title {
         font-weight: 700;
         color: #0f172a;
         margin-bottom: 0.35rem;
+        line-height: 1.35;
     }
     .candidate-sub {
         color: #475569;
         font-size: 0.92rem;
-        margin-bottom: 0.45rem;
+        line-height: 1.45;
+        margin-bottom: 0.5rem;
+        overflow-wrap: anywhere;
     }
     .candidate-list {
         margin: 0.35rem 0 0 0;
@@ -129,7 +155,9 @@ st.markdown(
         color: #0f172a;
     }
     .candidate-list li {
-        margin-bottom: 0.22rem;
+        line-height: 1.45;
+        margin-bottom: 0.38rem;
+        overflow-wrap: anywhere;
     }
     .candidate-panel-header {
         background: rgba(255,255,255,0.96);
@@ -142,9 +170,10 @@ st.markdown(
     .section-card {
         background: rgba(255,255,255,0.96);
         border: 1px solid rgba(15,23,42,0.08);
-        border-radius: 18px;
-        padding: 0.6rem 0.75rem 0.75rem 0.75rem;
+        border-radius: 12px;
+        padding: 0.75rem 0.9rem 0.85rem 0.9rem;
         box-shadow: 0 10px 24px rgba(15,23,42,0.05);
+        overflow-wrap: anywhere;
     }
     .daily-map-card {
         background: rgba(255,255,255,0.96);
@@ -157,10 +186,11 @@ st.markdown(
         background: rgba(255,255,255,0.98);
         border: 1px solid rgba(15,23,42,0.08);
         border-top: 4px solid #0f766e;
-        border-radius: 18px;
-        padding: 0.95rem 1rem;
-        min-height: 280px;
+        border-radius: 12px;
+        padding: 1rem 1.05rem;
+        min-height: 300px;
         box-shadow: 0 10px 24px rgba(15,23,42,0.05);
+        overflow-wrap: anywhere;
     }
     .weekly-day-title {
         font-weight: 700;
@@ -171,6 +201,7 @@ st.markdown(
     .weekly-day-sub {
         color: #475569;
         font-size: 0.9rem;
+        line-height: 1.45;
         margin-bottom: 0.55rem;
     }
     .weekly-day-list {
@@ -179,7 +210,9 @@ st.markdown(
         color: #0f172a;
     }
     .weekly-day-list li {
-        margin-bottom: 0.35rem;
+        line-height: 1.45;
+        margin-bottom: 0.42rem;
+        overflow-wrap: anywhere;
     }
     .tag-client {
         display: inline-block;
@@ -250,6 +283,75 @@ st.markdown(
         font-size: 0.82rem;
         font-weight: 700;
         margin-left: 0.35rem;
+    }
+    .tag-client,
+    .tag-potential,
+    .tag-hospital,
+    .tag-risk-normal,
+    .tag-risk-low,
+    .tag-risk-review,
+    .tag-risk-high {
+        margin-top: 0.15rem;
+        line-height: 1.25;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    .risk-focus-band {
+        background: rgba(255,255,255,0.98);
+        border: 1px solid rgba(15,23,42,0.08);
+        border-left: 6px solid #b45309;
+        border-radius: 12px;
+        padding: 1rem 1.1rem;
+        margin: 0.85rem 0 1rem 0;
+        box-shadow: 0 10px 24px rgba(15,23,42,0.05);
+    }
+    .risk-focus-title {
+        color: #0f172a;
+        font-weight: 800;
+        font-size: 1rem;
+        margin-bottom: 0.65rem;
+    }
+    .risk-focus-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 0.75rem;
+    }
+    .risk-focus-item {
+        background: #f8fafc;
+        border: 1px solid rgba(15,23,42,0.07);
+        border-radius: 10px;
+        padding: 0.75rem 0.8rem;
+    }
+    .risk-focus-label {
+        color: #475569;
+        font-size: 0.82rem;
+        font-weight: 700;
+        line-height: 1.35;
+    }
+    .risk-focus-value {
+        color: #0f172a;
+        font-size: 1.45rem;
+        font-weight: 750;
+        line-height: 1.15;
+        margin-top: 0.25rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .risk-focus-note {
+        color: #64748b;
+        font-size: 0.86rem;
+        line-height: 1.45;
+        margin-top: 0.65rem;
+        overflow-wrap: anywhere;
+    }
+    .ranking-list {
+        margin: 0.2rem 0 0 0;
+        padding-left: 1.1rem;
+        color: #0f172a;
+    }
+    .ranking-list li {
+        margin-bottom: 0.42rem;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
     }
     .stTabs [data-baseweb="tab-list"] {
         gap: 0.3rem;
@@ -685,11 +787,11 @@ st.markdown(
             border: 0.5pt solid #000000 !important;
             padding: 2px 4px !important;
             vertical-align: top !important;
-            white-space: nowrap !important;
+            white-space: normal !important;
             word-break: keep-all !important;
-            overflow-wrap: normal !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
+            overflow-wrap: break-word !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
         }
 
         .plot-container,
@@ -783,6 +885,65 @@ def risk_tag_class(risk_level: object) -> str:
     if level == LOW_CONFIDENCE_LABEL:
         return "tag-risk-low"
     return "tag-risk-normal"
+
+
+def format_metric_value(value: object, value_type: str = "int") -> str:
+    if value_type == "percent":
+        numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+        return "-" if pd.isna(numeric) else f"{float(numeric):.2%}"
+    if value_type == "float":
+        numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+        return "-" if pd.isna(numeric) else f"{float(numeric):.2f}"
+    if value_type == "km":
+        numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+        return "-" if pd.isna(numeric) else f"{float(numeric):.2f} km"
+    numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+    return "-" if pd.isna(numeric) else f"{int(round(float(numeric)))}"
+
+
+def render_risk_focus_band(title: str, metrics: list[tuple[str, object, str]], note: str = "") -> None:
+    items_html = "".join(
+        [
+            (
+                '<div class="risk-focus-item">'
+                f'<div class="risk-focus-label">{html_lib.escape(label)}</div>'
+                f'<div class="risk-focus-value">{html_lib.escape(format_metric_value(value, value_type))}</div>'
+                "</div>"
+            )
+            for label, value, value_type in metrics
+        ]
+    )
+    note_html = f'<div class="risk-focus-note">{html_lib.escape(note)}</div>' if note else ""
+    st.markdown(
+        f"""
+        <div class="risk-focus-band">
+            <div class="risk-focus-title">{html_lib.escape(title)}</div>
+            <div class="risk-focus-grid">{items_html}</div>
+            {note_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_ranking_card(title: str, rows: pd.DataFrame, label_col: str, value_col: str, value_type: str = "int") -> None:
+    if rows.empty:
+        st.info("目前沒有可排名資料。")
+        return
+    items = []
+    for _, row in rows.head(5).iterrows():
+        label = str(row.get(label_col, "") or "").strip() or "未標示"
+        value = format_metric_value(row.get(value_col), value_type)
+        items.append(f"<li>{html_lib.escape(label)}：<strong>{html_lib.escape(value)}</strong></li>")
+    st.markdown(
+        f"""
+        <div class="section-card">
+            <div class="candidate-title">{html_lib.escape(title)}</div>
+            <ol class="ranking-list">{''.join(items)}</ol>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def build_attendance_event_flags(raw_events: pd.DataFrame) -> pd.DataFrame:
@@ -1898,8 +2059,10 @@ def render_weekly_summary_cards(cards: list[dict[str, object]]) -> None:
         st.info("本週沒有可呈現的每日摘要。")
         return
 
-    columns = st.columns(5)
-    for column, card in zip(columns, cards):
+    for index, card in enumerate(cards):
+        if index % 3 == 0:
+            columns = st.columns(min(3, len(cards) - index))
+        column = columns[index % 3]
         selected_items = card["selected_stops"]
         if selected_items:
             selected_html = "".join(
@@ -2270,8 +2433,8 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
         """,
         unsafe_allow_html=True,
     )
-    for row_panels in chunked(candidate_panels, 3):
-        columns = st.columns(3)
+    for row_panels in chunked(candidate_panels, 2):
+        columns = st.columns(2)
         for column, panel in zip(columns, row_panels):
             selected_tag_class = (
                 "tag-client" if panel["selected_client_tag"] == "既有客戶"
@@ -2302,6 +2465,8 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
                     f"<li>{item['name']}{selected_suffix}{rank_suffix} · {item['distance']:.0f} m "
                     f"<span class=\"{tag_class}\">{item['tag']}</span></li>"
                 )
+            visible_list_items = list_items[:3]
+            hidden_candidate_count = max(len(list_items) - len(visible_list_items), 0)
             selected_name = panel["selected_hospital_name"] or "未判定"
             risk_level = panel.get("risk_level") or NORMAL_LABEL
             risk_score = float(panel.get("risk_score") or 0)
@@ -2312,7 +2477,12 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
                 f"（{risk_score:.0f} 分）</div>"
             )
             if risk_reason:
-                risk_html += f'<div class="candidate-sub">覆核原因：{html_lib.escape(risk_reason)}</div>'
+                risk_html += '<div class="candidate-sub">覆核原因：展開查看完整證據</div>'
+            more_candidates_html = (
+                f'<div class="candidate-sub">另有 {hidden_candidate_count} 個候選院所可展開查看</div>'
+                if hidden_candidate_count > 0
+                else ""
+            )
             html = f"""
             <div class="candidate-card">
                 <div class="candidate-title">#{panel['seq_no']} {panel['time']}</div>
@@ -2322,11 +2492,20 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
                 <div class="candidate-sub">系統選定：{selected_name}<span class="{selected_tag_class}">{selected_tag}</span></div>
                 {risk_html}
                 <ol class="candidate-list">
-                    {''.join(list_items)}
+                    {''.join(visible_list_items)}
                 </ol>
+                {more_candidates_html}
             </div>
             """
             column.markdown(html, unsafe_allow_html=True)
+            if risk_reason or hidden_candidate_count > 0:
+                with column.expander(f"#{panel['seq_no']} 完整候選與風險證據"):
+                    if risk_reason:
+                        st.markdown(f"**覆核原因**：{html_lib.escape(risk_reason)}")
+                    st.markdown(
+                        f"<ol class=\"candidate-list\">{''.join(list_items)}</ol>",
+                        unsafe_allow_html=True,
+                    )
 
 
 def summarize_period(
@@ -3423,10 +3602,9 @@ with tab_daily:
     employee_row = employees.loc[employees["employee_id"] == selected_employee_id].head(1)
     employee_row = employee_row.iloc[0] if not employee_row.empty else None
 
-    summary_left, summary_mid, summary_right, summary_extra, summary_more, summary_commute = st.columns(
-        [1.45, 1.05, 1.1, 1.1, 1.0, 1.15]
-    )
     if not day_route.empty and not day_attendance.empty:
+        summary_left, summary_mid, summary_right = st.columns(3)
+        summary_extra, summary_more, summary_commute = st.columns(3)
         route_row = day_route.iloc[0]
         attendance_row = day_attendance.iloc[0]
         event_flag_row = attendance_event_flags.loc[attendance_event_flags["attendance_uid"] == attendance_row["attendance_uid"]].head(1)
@@ -3678,6 +3856,27 @@ with tab_weekly:
         "公務里程",
         f"{week_routes['estimated_business_km'].fillna(0).sum():.2f} km" if not week_routes.empty else "0.00 km",
     )
+    weekly_cards = build_weekly_summary_cards(week_events, week_start)
+    weekly_review_total = sum(int(card.get("review_count", 0)) for card in weekly_cards)
+    weekly_high_total = sum(int((card.get("risk_counts") or {}).get(HIGH_RISK_LABEL, 0)) for card in weekly_cards)
+    weekly_home_low_confidence_total = sum(
+        int((card.get("risk_counts") or {}).get(LOW_CONFIDENCE_LABEL, 0)) for card in weekly_cards
+    )
+    most_reviewed_day = max(weekly_cards, key=lambda card: int(card.get("review_count", 0)), default=None)
+    most_reviewed_text = (
+        f"{most_reviewed_day['label']} {most_reviewed_day['date']}"
+        if most_reviewed_day and int(most_reviewed_day.get("review_count", 0)) > 0
+        else "本週無需優先追查日期"
+    )
+    render_risk_focus_band(
+        "本週覆核摘要",
+        [
+            ("需覆核點數", weekly_review_total, "int"),
+            ("高風險點數", weekly_high_total, "int"),
+            ("低信心點數", weekly_home_low_confidence_total, "int"),
+        ],
+        f"最可疑日期：{most_reviewed_text}",
+    )
 
     st.markdown("**週地圖路徑**")
     st.markdown('<div class="daily-map-card">', unsafe_allow_html=True)
@@ -3686,7 +3885,7 @@ with tab_weekly:
     st.caption("週版地圖以週一到週五整週呈現，打卡點編號採用「週次序號.當日點位序號」格式，例如 1.1 代表週一第一個點。")
 
     st.markdown("**每日摘要卡**")
-    render_weekly_summary_cards(build_weekly_summary_cards(week_events, week_start))
+    render_weekly_summary_cards(weekly_cards)
 
 with tab_period:
     st.subheader("個人期間報表")
@@ -3749,6 +3948,18 @@ with tab_period:
         st.warning("目前選擇條件沒有對應資料。")
     else:
         summary_row = summary_df.iloc[0]
+        render_risk_focus_band(
+            "覆核風險摘要",
+            [
+                ("需覆核點數", summary_row["需覆核點數"], "int"),
+                ("高風險點數", summary_row["高風險點數"], "int"),
+                ("平均風險率", summary_row["平均風險率"], "float"),
+                ("僅居家附近軌跡天數", summary_row["僅居家附近軌跡天數"], "int"),
+            ],
+            "先看這一區判斷是否需要追查；下方出勤、里程、財務資料作為佐證。",
+        )
+
+        st.markdown("**出勤與里程摘要**")
         metric_row1 = st.columns(4)
         metric_row1[0].metric("總出勤時數", f"{summary_row['總出勤時數']:.2f} 小時")
         metric_row1[1].metric("總打卡次數", int(summary_row["總打卡次數"]))
@@ -3764,11 +3975,6 @@ with tab_period:
         metric_row3[1].metric("平均每日公務里程", f"{summary_row['平均每日公務里程']:.2f} km")
         metric_row3[2].metric("未打卡未處理次數", int(summary_row["未打卡未處理次數"]))
         metric_row3[3].metric("實際加班率", f"{summary_row['實際加班率']:.2%}")
-        metric_row4 = st.columns(4)
-        metric_row4[0].metric("忘刷申請總次數", int(summary_row["忘刷申請總次數"]))
-        metric_row4[1].metric("需覆核點數", int(summary_row["需覆核點數"]))
-        metric_row4[2].metric("高風險點數", int(summary_row["高風險點數"]))
-        metric_row4[3].metric("僅居家附近軌跡天數", int(summary_row["僅居家附近軌跡天數"]))
 
         st.markdown("**報表摘要**")
         summary_show = summary_df.rename(columns={"總匹配院所次數": "匹配院所總次數"})
@@ -4034,6 +4240,50 @@ with tab_overview:
             overview_claim_employee["比較燈號"] = "區間不判定"
         overview_claim_employee = overview_claim_employee.sort_values("差異率絕對值", ascending=False)
 
+    render_risk_focus_band(
+        "全業務覆核風險摘要",
+        [
+            ("需覆核點數", overview_summary["需覆核點數"].fillna(0).sum() if not overview_summary.empty else 0, "int"),
+            ("高風險點數", overview_summary["高風險點數"].fillna(0).sum() if not overview_summary.empty else 0, "int"),
+            ("平均風險率", overview_summary["平均風險率"].mean() if not overview_summary.empty else 0, "float"),
+            ("僅居家附近軌跡天數", overview_summary["僅居家附近軌跡天數"].fillna(0).sum() if not overview_summary.empty else 0, "int"),
+        ],
+        "此區作為主管優先追查入口；完整出勤、路線與財務資料拆在下方表格分頁。",
+    )
+
+    st.markdown("**優先追查排行**")
+    rank_col1, rank_col2, rank_col3, rank_col4 = st.columns(4)
+    with rank_col1:
+        render_ranking_card(
+            "高風險員工 Top 5",
+            overview_summary.sort_values(["高風險點數", "風險分數"], ascending=[False, False]) if not overview_summary.empty else overview_summary,
+            "employee_label",
+            "高風險點數",
+        )
+    with rank_col2:
+        render_ranking_card(
+            "需覆核點數 Top 5",
+            overview_summary.sort_values(["需覆核點數", "風險分數"], ascending=[False, False]) if not overview_summary.empty else overview_summary,
+            "employee_label",
+            "需覆核點數",
+        )
+    with rank_col3:
+        render_ranking_card(
+            "僅居家附近 Top 5",
+            overview_summary.sort_values(["僅居家附近軌跡天數", "風險分數"], ascending=[False, False]) if not overview_summary.empty else overview_summary,
+            "employee_label",
+            "僅居家附近軌跡天數",
+        )
+    with rank_col4:
+        render_ranking_card(
+            "申報差異 Top 5",
+            overview_claim_employee.sort_values("差異率絕對值", ascending=False) if not overview_claim_employee.empty else overview_claim_employee,
+            "employee_label",
+            "差異率絕對值",
+            "percent",
+        )
+
+    st.markdown("**全員彙總指標**")
     overview_col2.metric("納入比較員工數", len(overview_summary))
     top_row = st.columns(4)
     top_row[0].metric("全員總計預估里程", f"{overview_summary['總計預估里程'].sum():.2f} km")
@@ -4053,14 +4303,15 @@ with tab_overview:
             st.info("目前日期區間沒有資料。")
         else:
             fig_km = px.bar(
-                overview_summary.sort_values("總計預估里程", ascending=False),
-                x="employee_label",
-                y="總計預估里程",
+                overview_summary.sort_values("總計預估里程", ascending=True),
+                x="總計預估里程",
+                y="employee_label",
                 color="department",
                 text_auto=".1f",
+                orientation="h",
                 labels={"employee_label": "員工", "總計預估里程": "總計預估里程(km)", "department": "部門"},
             )
-            fig_km.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
+            fig_km.update_layout(height=460, margin=dict(l=120, r=10, t=10, b=30))
             st.plotly_chart(fig_km, width="stretch")
     with chart2:
         st.markdown("**風險率 vs 異常率**")
@@ -4089,13 +4340,14 @@ with tab_overview:
             st.info("目前日期區間沒有資料。")
         else:
             fig_hours = px.bar(
-                overview_summary.sort_values("總出勤時數", ascending=False),
-                x="employee_label",
-                y=["總出勤時數", "總GPS點數"],
+                overview_summary.sort_values("總出勤時數", ascending=True),
+                x=["總出勤時數", "總GPS點數"],
+                y="employee_label",
                 barmode="group",
+                orientation="h",
                 labels={"employee_label": "員工", "value": "數值", "variable": "指標"},
             )
-            fig_hours.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
+            fig_hours.update_layout(height=460, margin=dict(l=120, r=10, t=10, b=30))
             st.plotly_chart(fig_hours, width="stretch")
     with chart4:
         st.markdown("**財務補貼總覽**")
@@ -4119,13 +4371,14 @@ with tab_overview:
             st.info("目前日期區間沒有資料。")
         else:
             fig_risk_rank = px.bar(
-                overview_summary.sort_values("風險分數", ascending=False),
-                x="employee_label",
-                y=["需覆核點數", "高風險點數", "僅居家附近軌跡天數"],
+                overview_summary.sort_values("風險分數", ascending=True),
+                x=["需覆核點數", "高風險點數", "僅居家附近軌跡天數"],
+                y="employee_label",
                 barmode="group",
+                orientation="h",
                 labels={"employee_label": "員工", "value": "數量", "variable": "指標"},
             )
-            fig_risk_rank.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
+            fig_risk_rank.update_layout(height=460, margin=dict(l=120, r=10, t=10, b=30))
             st.plotly_chart(fig_risk_rank, width="stretch")
     with risk_chart2:
         st.markdown("**風險分數排名**")
@@ -4158,14 +4411,15 @@ with tab_overview:
             )
             fig_claim_bar = px.bar(
                 claim_bar_df,
-                x="employee_label",
-                y="公里數",
+                x="公里數",
+                y="employee_label",
                 color="指標",
                 barmode="group",
+                orientation="h",
                 hover_data=["department"],
                 labels={"employee_label": "員工", "公里數": "公里數", "department": "部門"},
             )
-            fig_claim_bar.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
+            fig_claim_bar.update_layout(height=460, margin=dict(l=120, r=10, t=10, b=30))
             st.plotly_chart(fig_claim_bar, width="stretch")
     with claim_chart2:
         st.markdown("**差異率排名**")
@@ -4284,28 +4538,84 @@ with tab_overview:
             "日當費",
         ],
     )
-    st.dataframe(
-        overview_summary_view,
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "總計預估里程": st.column_config.NumberColumn(format="%.2f km"),
-            "總計預估公務里程": st.column_config.NumberColumn(format="%.2f km"),
-            "平均路徑信心": st.column_config.NumberColumn(format="%.2f"),
-            "未打卡未處理次數": st.column_config.NumberColumn(format="%d"),
-            "需覆核點數": st.column_config.NumberColumn(format="%d"),
-            "高風險點數": st.column_config.NumberColumn(format="%d"),
-            "風險分數": st.column_config.NumberColumn(format="%.0f"),
-            "平均風險率": st.column_config.NumberColumn(format="%.2f"),
-            "僅居家附近軌跡天數": st.column_config.NumberColumn(format="%d"),
-            "異常率": st.column_config.NumberColumn(format="%.2%"),
-            "超時出勤率": st.column_config.NumberColumn(format="%.2%"),
-            "實際加班率": st.column_config.NumberColumn(format="%.2%"),
-            "油資補貼": st.column_config.NumberColumn(format="%.2f"),
-            "維修補貼": st.column_config.NumberColumn(format="%.2f"),
-            "日當費": st.column_config.NumberColumn(format="%.2f"),
-        },
-    )
+    route_table_tab, risk_table_tab, finance_table_tab = st.tabs(["出勤路線", "風險覆核", "財務申報"])
+    with route_table_tab:
+        route_columns = [
+            "員工編號",
+            "員工",
+            "部門",
+            "出勤天數",
+            "總打卡次數",
+            "總GPS點數",
+            "總出勤時數",
+            "總計預估里程",
+            "總計預估公務里程",
+            "平均路徑信心",
+            "異常率",
+            "超時出勤率",
+            "實際加班率",
+            "未打卡未處理次數",
+        ]
+        st.dataframe(
+            overview_summary_view[[column for column in route_columns if column in overview_summary_view.columns]],
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "總計預估里程": st.column_config.NumberColumn(format="%.2f km"),
+                "總計預估公務里程": st.column_config.NumberColumn(format="%.2f km"),
+                "平均路徑信心": st.column_config.NumberColumn(format="%.2f"),
+                "異常率": st.column_config.NumberColumn(format="%.2%"),
+                "超時出勤率": st.column_config.NumberColumn(format="%.2%"),
+                "實際加班率": st.column_config.NumberColumn(format="%.2%"),
+                "未打卡未處理次數": st.column_config.NumberColumn(format="%d"),
+            },
+        )
+    with risk_table_tab:
+        risk_columns = [
+            "員工編號",
+            "員工",
+            "部門",
+            "需覆核點數",
+            "高風險點數",
+            "風險分數",
+            "平均風險率",
+            "僅居家附近軌跡天數",
+            "住家起訖但缺外勤軌跡天數",
+            "路線佐證不足天數",
+        ]
+        st.dataframe(
+            overview_summary_view[[column for column in risk_columns if column in overview_summary_view.columns]],
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "需覆核點數": st.column_config.NumberColumn(format="%d"),
+                "高風險點數": st.column_config.NumberColumn(format="%d"),
+                "風險分數": st.column_config.NumberColumn(format="%.0f"),
+                "平均風險率": st.column_config.NumberColumn(format="%.2f"),
+                "僅居家附近軌跡天數": st.column_config.NumberColumn(format="%d"),
+                "住家起訖但缺外勤軌跡天數": st.column_config.NumberColumn(format="%d"),
+                "路線佐證不足天數": st.column_config.NumberColumn(format="%d"),
+            },
+        )
+    with finance_table_tab:
+        finance_columns = [
+            "員工編號",
+            "員工",
+            "部門",
+            "油資補貼",
+            "維修補貼",
+            "日當費",
+        ]
+        st.dataframe(
+            overview_summary_view[[column for column in finance_columns if column in overview_summary_view.columns]],
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "油資補貼": st.column_config.NumberColumn(format="%.2f"),
+                "維修補貼": st.column_config.NumberColumn(format="%.2f"),
+                "日當費": st.column_config.NumberColumn(format="%.2f"),
+            },
+        )
     st.download_button(
         "下載全業務總覽 CSV",
         data=to_csv_bytes(overview_summary),

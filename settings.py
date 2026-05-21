@@ -25,6 +25,17 @@ class AppConfig:
     candidate_top_n: int = 5
     confidence_distance_m: float = 300.0
     ambiguous_distance_m: float = 500.0
+    risk_review_distance_m: float = 1000.0
+    risk_high_distance_m: float = 1500.0
+    risk_auto_select_max_distance_m: float = 2000.0
+    risk_customer_override_gap_m: float = 500.0
+    risk_ambiguity_distance_m: float = 150.0
+    risk_ambiguity_candidate_count: int = 3
+    risk_min_travel_speed_kmph: float = 5.0
+    risk_impossible_travel_buffer_min: float = 10.0
+    risk_home_radius_m: float = 500.0
+    risk_home_area_max_distance_m: float = 1000.0
+    risk_min_field_visit_distance_from_home_m: float = 1000.0
     fuel_rate: float = 3.0
     maintenance_rate: float = 1.5
     break_minutes: int = 30
@@ -42,6 +53,17 @@ CONFIG_OVERRIDE_FIELDS = {
     "candidate_top_n",
     "confidence_distance_m",
     "ambiguous_distance_m",
+    "risk_review_distance_m",
+    "risk_high_distance_m",
+    "risk_auto_select_max_distance_m",
+    "risk_customer_override_gap_m",
+    "risk_ambiguity_distance_m",
+    "risk_ambiguity_candidate_count",
+    "risk_min_travel_speed_kmph",
+    "risk_impossible_travel_buffer_min",
+    "risk_home_radius_m",
+    "risk_home_area_max_distance_m",
+    "risk_min_field_visit_distance_from_home_m",
     "fuel_rate",
     "maintenance_rate",
     "break_minutes",
@@ -54,13 +76,23 @@ CONFIG_OVERRIDE_FIELDS = {
 
 
 def _coerce_override(field_name: str, value):
-    if field_name in {"candidate_top_n", "break_minutes"}:
+    if field_name in {"candidate_top_n", "break_minutes", "risk_ambiguity_candidate_count"}:
         return int(value)
     if field_name in {
         "detour_index",
         "average_speed_kmph",
         "confidence_distance_m",
         "ambiguous_distance_m",
+        "risk_review_distance_m",
+        "risk_high_distance_m",
+        "risk_auto_select_max_distance_m",
+        "risk_customer_override_gap_m",
+        "risk_ambiguity_distance_m",
+        "risk_min_travel_speed_kmph",
+        "risk_impossible_travel_buffer_min",
+        "risk_home_radius_m",
+        "risk_home_area_max_distance_m",
+        "risk_min_field_visit_distance_from_home_m",
         "fuel_rate",
         "maintenance_rate",
         "light_green_pct",

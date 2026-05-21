@@ -10,9 +10,10 @@ from bi_service import BIService
 from checkin_importer import CheckinImporter
 from db_manager import DatabaseManager
 from finance_auditor import FinanceAuditor
-from google_routes_service import rebuild_google_route_summary_from_cache
+from google_routes_service import load_google_route_cache_detail, rebuild_google_route_summary_from_cache
 from master_data_service import MasterDataService
 from matcher import Matcher
+from risk_service import RiskService
 from routing_engine import RoutingEngine
 from settings import AppConfig, build_config, ensure_directories
 
@@ -221,6 +222,17 @@ def run_pipeline(config: AppConfig | None = None) -> dict[str, pd.DataFrame]:
     attendance_aux = load_optional_csv(config.data_dir / "attendance_aux.csv")
     finance_result = finance.audit(route_summary, employees, monthly_claims, attendance_aux)
     daily_metrics = bi_service.build_daily_metrics(attendance, route_summary, stop_matches)
+    risk_service = RiskService(config)
+    google_route_detail = load_google_route_cache_detail(config.sqlite_path)
+    event_risk = risk_service.build_event_risk(raw_events, stop_matches, google_route_detail, finance_result)
+    daily_risk = risk_service.build_daily_risk_summary(
+        event_risk,
+        attendance,
+        raw_events=raw_events,
+        employees=employees,
+        matches=stop_matches,
+    )
+    employee_risk = risk_service.build_employee_risk_summary(daily_risk)
     summary_tables = bi_service.build_summary(daily_metrics, finance_result)
 
     result_tables = {
@@ -231,6 +243,9 @@ def run_pipeline(config: AppConfig | None = None) -> dict[str, pd.DataFrame]:
         "raw_check_events": raw_events,
         "attendance_day_group": attendance,
         "route_stop_match": stop_matches,
+        "event_risk_review": event_risk,
+        "daily_risk_summary": daily_risk,
+        "employee_risk_summary": employee_risk,
         "daily_route_summary": route_summary,
         "finance_audit_result": finance_result,
         "bi_daily_metrics": daily_metrics,
@@ -246,6 +261,9 @@ def run_pipeline(config: AppConfig | None = None) -> dict[str, pd.DataFrame]:
             "raw_check_events",
             "attendance_day_group",
             "route_stop_match",
+            "event_risk_review",
+            "daily_risk_summary",
+            "employee_risk_summary",
             "daily_route_summary",
             "finance_audit_result",
         ]:

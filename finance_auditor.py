@@ -63,9 +63,14 @@ class FinanceAuditor:
             monthly_claims["year_month"] = monthly_claims["year_month"].apply(_normalize_year_month).astype("string")
             monthly_claims["employee_id"] = monthly_claims["employee_id"].astype("string")
             monthly_claims["claimed_km"] = pd.to_numeric(monthly_claims["claimed_km"], errors="coerce")
+            monthly_claims = (
+                monthly_claims.dropna(subset=["year_month", "claimed_km"])
+                .groupby(["employee_id", "year_month"], dropna=False, as_index=False)["claimed_km"]
+                .sum()
+            )
             claim_map = {
                 (row["employee_id"], row["year_month"]): float(row["claimed_km"])
-                for _, row in monthly_claims.dropna(subset=["year_month", "claimed_km"]).iterrows()
+                for _, row in monthly_claims.iterrows()
             }
         approved_month_map = (
             work_df.groupby(["employee_id", "year_month"])["estimated_business_km"].sum().to_dict()

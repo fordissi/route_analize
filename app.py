@@ -49,6 +49,8 @@ from risk_presentation import (
     summarize_place_risk_visits,
     translate_risk_reason_codes,
 )
+from print_presentation import build_print_table_html
+from map_presentation import build_padded_map_view
 
 
 st.set_page_config(page_title="Function Route Report", layout="wide")
@@ -754,7 +756,7 @@ st.markdown(
             max-height: none !important;
             border: 0 !important;
             padding: 0 !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
         }
@@ -764,6 +766,28 @@ st.markdown(
             height: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
+        }
+
+        .weekly-print-map-card {
+            width: 58% !important;
+            max-width: 58% !important;
+            margin: 0 auto 6pt auto !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.weekly-print-map-card) {
+            display: none !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.weekly-print-map-card) + div[data-testid="stElementContainer"] {
+            width: 58% !important;
+            max-width: 58% !important;
+            height: 174mm !important;
+            min-height: 174mm !important;
+            max-height: 174mm !important;
+            margin: 0 auto 6pt auto !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            overflow: visible !important;
         }
 
         h3 + div[data-testid="stElementContainer"] + div[data-testid="stElementContainer"] [data-testid="stPlotlyChart"],
@@ -777,13 +801,40 @@ st.markdown(
         [data-testid="stPlotlyChart"]:has(.maplibregl-map) .plot-container,
         [data-testid="stPlotlyChart"]:has(.maplibregl-map) .svg-container,
         [data-testid="stPlotlyChart"]:has(.maplibregl-map) .main-svg {
-            height: 115mm !important;
+            height: 112mm !important;
             max-height: none !important;
+            min-height: 112mm !important;
+            overflow: visible !important;
         }
 
         [data-testid="stPlotlyChart"]:has(.maplibregl-map) .maplibregl-map,
         [data-testid="stPlotlyChart"]:has(.maplibregl-map) .maplibregl-canvas {
-            height: calc(115mm - 10px) !important;
+            height: 112mm !important;
+            min-height: 112mm !important;
+        }
+
+        .weekly-print-map-card [data-testid="stPlotlyChart"],
+        .weekly-print-map-card [data-testid="stPlotlyChart"] .js-plotly-plot,
+        .weekly-print-map-card [data-testid="stPlotlyChart"] .plot-container,
+        .weekly-print-map-card [data-testid="stPlotlyChart"] .svg-container,
+        .weekly-print-map-card [data-testid="stPlotlyChart"] .main-svg,
+        div[data-testid="stElementContainer"]:has(.weekly-print-map-card) + div[data-testid="stElementContainer"] [data-testid="stFullScreenFrame"],
+        div[data-testid="stElementContainer"]:has(.weekly-print-map-card) + div[data-testid="stElementContainer"] [data-testid="stPlotlyChart"],
+        div[data-testid="stElementContainer"]:has(.weekly-print-map-card) + div[data-testid="stElementContainer"] [data-testid="stPlotlyChart"] .js-plotly-plot,
+        div[data-testid="stElementContainer"]:has(.weekly-print-map-card) + div[data-testid="stElementContainer"] [data-testid="stPlotlyChart"] .plot-container,
+        div[data-testid="stElementContainer"]:has(.weekly-print-map-card) + div[data-testid="stElementContainer"] [data-testid="stPlotlyChart"] .svg-container,
+        div[data-testid="stElementContainer"]:has(.weekly-print-map-card) + div[data-testid="stElementContainer"] [data-testid="stPlotlyChart"] .main-svg {
+            height: 174mm !important;
+            min-height: 174mm !important;
+            max-height: none !important;
+        }
+
+        .weekly-print-map-card [data-testid="stPlotlyChart"] .maplibregl-map,
+        .weekly-print-map-card [data-testid="stPlotlyChart"] .maplibregl-canvas,
+        div[data-testid="stElementContainer"]:has(.weekly-print-map-card) + div[data-testid="stElementContainer"] [data-testid="stPlotlyChart"] .maplibregl-map,
+        div[data-testid="stElementContainer"]:has(.weekly-print-map-card) + div[data-testid="stElementContainer"] [data-testid="stPlotlyChart"] .maplibregl-canvas {
+            height: 174mm !important;
+            min-height: 174mm !important;
         }
 
         div[data-testid="stMetric"] {
@@ -820,9 +871,29 @@ st.markdown(
             display: block !important;
             width: 100% !important;
             max-width: 100% !important;
-            margin: 0 0 12pt 0 !important;
+            margin: 0 0 8pt 0 !important;
             overflow: visible !important;
             clear: both !important;
+        }
+
+        .print-table-block {
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+            margin-bottom: 10pt !important;
+        }
+
+        .print-section-title {
+            font-size: 11pt !important;
+            font-weight: 800 !important;
+            margin: 0 0 4pt 0 !important;
+            break-after: avoid !important;
+            page-break-after: avoid !important;
+        }
+
+        .print-table-note {
+            font-size: 7.5pt !important;
+            margin-top: 3pt !important;
+            color: #333333 !important;
         }
 
         table {
@@ -833,6 +904,20 @@ st.markdown(
             line-height: 1.25 !important;
             page-break-inside: auto !important;
             clear: both !important;
+        }
+
+        .print-table {
+            table-layout: auto !important;
+            font-size: 7.6pt !important;
+            line-height: 1.22 !important;
+        }
+
+        .print-table--compact {
+            font-size: 7.2pt !important;
+        }
+
+        .print-table--summary {
+            font-size: 8pt !important;
         }
 
         thead {
@@ -865,6 +950,17 @@ st.markdown(
             text-overflow: clip !important;
         }
 
+        .print-table th,
+        .print-table td {
+            word-break: keep-all !important;
+            overflow-wrap: anywhere !important;
+        }
+
+        .print-table .print-col-wide-text {
+            min-width: 38mm !important;
+            max-width: 72mm !important;
+        }
+
         .plot-container,
         .svg-container,
         .main-svg {
@@ -891,14 +987,26 @@ def to_csv_bytes(dataframe: pd.DataFrame) -> bytes:
     return buffer.getvalue().encode("utf-8-sig")
 
 
-def render_print_table(dataframe: pd.DataFrame, columns: list[str] | None = None) -> None:
+def render_print_table(
+    dataframe: pd.DataFrame,
+    columns: list[str] | None = None,
+    *,
+    title: str | None = None,
+    max_rows: int | None = None,
+    wide_text_columns: list[str] | None = None,
+    table_class: str = "",
+) -> None:
     if dataframe.empty:
         return
-    print_view = dataframe.copy()
-    if columns is not None:
-        print_view = print_view[[column for column in columns if column in print_view.columns]].copy()
-    html = print_view.to_html(index=False, escape=True, border=0)
-    st.markdown(f'<div class="print-only">{html}</div>', unsafe_allow_html=True)
+    html = build_print_table_html(
+        dataframe,
+        columns,
+        title=title,
+        max_rows=max_rows,
+        wide_text_columns=wide_text_columns,
+        table_class=table_class,
+    )
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def compute_zoom(latitudes: list[float], longitudes: list[float]) -> float:
@@ -2464,12 +2572,16 @@ def build_daily_map(
             )
         )
 
-    lat_span = max(fit_latitudes) - min(fit_latitudes)
-    lon_span = max(fit_longitudes) - min(fit_longitudes)
-    lat_padding = max(lat_span * 0.45, 0.008)
-    lon_padding = max(lon_span * 0.45, 0.008)
-    padded_lats = [min(fit_latitudes) - lat_padding, max(fit_latitudes) + lat_padding]
-    padded_lons = [min(fit_longitudes) - lon_padding, max(fit_longitudes) + lon_padding]
+    map_view = build_padded_map_view(
+        fit_latitudes,
+        fit_longitudes,
+        padding_ratio=0.45,
+        min_padding=0.008,
+        zoom_out=1.25,
+        min_zoom=2.4,
+    )
+    padded_lats = map_view["padded_latitudes"]
+    padded_lons = map_view["padded_longitudes"]
 
     fig.add_trace(
         go.Scattermap(
@@ -2485,14 +2597,9 @@ def build_daily_map(
     fig.update_layout(
         map_style="open-street-map",
         map=dict(
-            center=dict(lat=sum(padded_lats) / len(padded_lats), lon=sum(padded_lons) / len(padded_lons)),
-            zoom=max(compute_zoom(padded_lats, padded_lons) - 1.25, 2.4),
-            bounds=dict(
-                west=min(padded_lons),
-                east=max(padded_lons),
-                south=min(padded_lats),
-                north=max(padded_lats),
-            ),
+            center=map_view["center"],
+            zoom=map_view["zoom"],
+            bounds=map_view["bounds"],
         ),
         height=780,
         margin=dict(l=0, r=0, t=10, b=0),
@@ -2902,12 +3009,17 @@ def build_weekly_map(
         )
     )
 
-    lat_span = max(fit_latitudes) - min(fit_latitudes)
-    lon_span = max(fit_longitudes) - min(fit_longitudes)
-    lat_padding = max(lat_span * 0.45, 0.008)
-    lon_padding = max(lon_span * 0.45, 0.008)
-    padded_lats = [min(fit_latitudes) - lat_padding, max(fit_latitudes) + lat_padding]
-    padded_lons = [min(fit_longitudes) - lon_padding, max(fit_longitudes) + lon_padding]
+    map_view = build_padded_map_view(
+        fit_latitudes,
+        fit_longitudes,
+        padding_ratio=1.15,
+        min_padding=0.04,
+        zoom_out=2.8,
+        min_zoom=2.0,
+        max_zoom=5.8,
+    )
+    padded_lats = map_view["padded_latitudes"]
+    padded_lons = map_view["padded_longitudes"]
 
     fig.add_trace(
         go.Scattermap(
@@ -2923,16 +3035,11 @@ def build_weekly_map(
     fig.update_layout(
         map_style="open-street-map",
         map=dict(
-            center=dict(lat=sum(padded_lats) / len(padded_lats), lon=sum(padded_lons) / len(padded_lons)),
-            zoom=max(compute_zoom(padded_lats, padded_lons) - 1.15, 2.2),
-            bounds=dict(
-                west=min(padded_lons),
-                east=max(padded_lons),
-                south=min(padded_lats),
-                north=max(padded_lats),
-            ),
+            center=map_view["center"],
+            zoom=map_view["zoom"],
+            bounds=map_view["bounds"],
         ),
-        height=820,
+        height=980,
         margin=dict(l=0, r=0, t=10, b=0),
         legend=dict(orientation="h", yanchor="bottom", y=0.01, xanchor="left", x=0.01),
     )
@@ -4563,13 +4670,35 @@ with tab_weekly:
     )
 
     st.markdown("**週地圖路徑**")
-    st.markdown('<div class="daily-map-card">', unsafe_allow_html=True)
+    st.markdown('<div class="daily-map-card weekly-print-map-card">', unsafe_allow_html=True)
     st.plotly_chart(build_weekly_map(week_events, weekly_employee_row, week_google_segments), width="stretch")
     st.markdown("</div>", unsafe_allow_html=True)
     st.caption("週版地圖以週一到週五整週呈現，打卡點編號採用「週次序號.當日點位序號」格式，例如 1.1 代表週一第一個點。")
 
     st.markdown("**每日摘要卡**")
     render_weekly_summary_cards(weekly_cards)
+    weekly_print_rows = []
+    for card in weekly_cards:
+        risk_counts = card.get("risk_counts", {}) or {}
+        weekly_print_rows.append(
+            {
+                "日期": card.get("date", ""),
+                "星期": card.get("label", ""),
+                "打卡點": card.get("event_count", 0),
+                "GPS點": card.get("gps_event_count", 0),
+                "需覆核": card.get("review_count", 0),
+                "高風險": int(risk_counts.get(HIGH_RISK_LABEL, 0)),
+                "低信心": int(risk_counts.get(LOW_CONFIDENCE_LABEL, 0)),
+                "風險優先分": f"{float(card.get('risk_priority_score', 0) or 0):.0f}",
+                "主要風險": card.get("primary_issue", ""),
+            }
+        )
+    render_print_table(
+        pd.DataFrame(weekly_print_rows),
+        title="週報每日摘要",
+        wide_text_columns=["主要風險"],
+        table_class="print-table--summary",
+    )
 
 with tab_period:
     st.subheader("個人期間報表")

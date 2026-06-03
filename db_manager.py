@@ -354,6 +354,7 @@ class DatabaseManager:
                 )
 
     def _migrate_risk_tables(self, conn: sqlite3.Connection) -> None:
+        self._ensure_column(conn, "event_risk_review", "distance_from_home_m", "REAL")
         for table_name in ["daily_risk_summary", "employee_risk_summary"]:
             self._ensure_column(conn, table_name, "risk_priority_score", "REAL")
             self._ensure_column(conn, table_name, "risk_priority_rate", "REAL")

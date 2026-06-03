@@ -110,3 +110,52 @@ def test_replace_table_preserves_risk_table_primary_key(tmp_path):
     pk_by_column = {row[1]: row[5] for row in table_info}
     assert pk_by_column["attendance_uid"] == 1
     assert rows == [("E001_2026-04-15_1_batch", "normal")]
+
+
+def test_initialize_migrates_existing_event_risk_table_with_home_distance(tmp_path):
+    db_path = tmp_path / "risk.sqlite"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE event_risk_review (
+                event_uid TEXT PRIMARY KEY,
+                attendance_uid TEXT,
+                risk_level TEXT,
+                risk_score REAL,
+                risk_reason_codes TEXT,
+                risk_reason_text TEXT,
+                selected_distance_m REAL,
+                nearest_distance_m REAL,
+                distance_gap_m REAL,
+                selected_rank INTEGER
+            )
+            """
+        )
+
+    db = DatabaseManager(db_path)
+    db.initialize()
+    event_risk = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "risk_level": "需覆核",
+                "risk_score": 6.0,
+                "risk_reason_codes": "near_home_checkin",
+                "risk_reason_text": "打卡點距住家 39m，可能在住家附近打卡",
+                "selected_distance_m": 1227.0,
+                "nearest_distance_m": 541.0,
+                "distance_gap_m": 686.0,
+                "selected_rank": 37,
+                "distance_from_home_m": 39.0,
+            }
+        ]
+    )
+
+    with db.connect() as conn:
+        db.replace_table(conn, "event_risk_review", event_risk)
+        columns = table_columns(conn, "event_risk_review")
+        rows = conn.execute("SELECT event_uid, distance_from_home_m FROM event_risk_review").fetchall()
+
+    assert "distance_from_home_m" in columns
+    assert rows == [("e1", 39.0)]

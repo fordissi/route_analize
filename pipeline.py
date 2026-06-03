@@ -186,6 +186,8 @@ def run_pipeline(config: AppConfig | None = None) -> dict[str, pd.DataFrame]:
         top_n=config.candidate_top_n,
         hospital_keywords=config.hospital_keywords,
         hospital_exclude_keywords=config.hospital_exclude_keywords,
+        hospital_priority_distance_m=config.hospital_priority_distance_m,
+        existing_client_priority_distance_m=config.existing_client_priority_distance_m,
     )
     routing = RoutingEngine(
         detour_index=config.detour_index,
@@ -224,7 +226,7 @@ def run_pipeline(config: AppConfig | None = None) -> dict[str, pd.DataFrame]:
     daily_metrics = bi_service.build_daily_metrics(attendance, route_summary, stop_matches)
     risk_service = RiskService(config)
     google_route_detail = load_google_route_cache_detail(config.sqlite_path)
-    event_risk = risk_service.build_event_risk(raw_events, stop_matches, google_route_detail, finance_result)
+    event_risk = risk_service.build_event_risk(raw_events, stop_matches, google_route_detail, finance_result, employees=employees)
     daily_risk = risk_service.build_daily_risk_summary(
         event_risk,
         attendance,

@@ -9,6 +9,7 @@ from matcher import haversine_meter
 
 
 REASON_WEIGHTS = {
+    "near_home_checkin": 6,
     "far_customer_override": 5,
     "selected_not_top5": 3,
     "selected_distance_too_far": 4,
@@ -19,6 +20,26 @@ REASON_WEIGHTS = {
     "home_area_only_trace": 6,
     "home_start_end_without_field_trace": 4,
     "insufficient_route_evidence": 3,
+}
+
+DAILY_PRIORITY_WEIGHTS = {
+    "near_home_checkin": 10,
+    "impossible_travel_time": 16,
+    "far_customer_override": 12,
+    "selected_distance_too_far": 10,
+    "home_area_only_trace": 18,
+    "home_start_end_without_field_trace": 14,
+    "insufficient_route_evidence": 8,
+    "high_finance_variance": 6,
+    "no_reasonable_candidate": 3,
+    "selected_not_top5": 3,
+    "nearby_candidate_conflict": 1,
+}
+
+DAILY_PRIORITY_CAPS = {
+    "nearby_candidate_conflict": 1,
+    "selected_not_top5": 2,
+    "no_reasonable_candidate": 2,
 }
 
 NORMAL_LABEL = "正常"
@@ -37,6 +58,7 @@ EVENT_RISK_COLUMNS = [
     "nearest_distance_m",
     "distance_gap_m",
     "selected_rank",
+    "distance_from_home_m",
 ]
 
 DAILY_RISK_COLUMNS = [
@@ -47,9 +69,12 @@ DAILY_RISK_COLUMNS = [
     "work_date",
     "gps_event_count",
     "risk_score",
+    "risk_priority_score",
+    "risk_priority_rate",
     "risk_rate",
     "review_event_count",
     "high_risk_event_count",
+    "low_confidence_event_count",
     "risk_level",
     "home_area_only_trace",
     "home_start_end_without_field_trace",
@@ -67,10 +92,13 @@ EMPLOYEE_RISK_COLUMNS = [
     "attendance_days",
     "gps_event_count",
     "risk_score",
+    "risk_priority_score",
+    "risk_priority_rate",
     "risk_rate",
     "review_rate",
     "review_event_count",
     "high_risk_event_count",
+    "low_confidence_event_count",
     "home_area_only_days",
     "home_start_end_without_field_days",
     "insufficient_route_evidence_days",
@@ -88,6 +116,7 @@ class RiskService:
         matches: pd.DataFrame,
         route_segments: pd.DataFrame,
         finance: pd.DataFrame,
+        employees: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
         if raw_events.empty:
             return pd.DataFrame(columns=EVENT_RISK_COLUMNS)
@@ -98,6 +127,7 @@ class RiskService:
         if events.empty:
             return pd.DataFrame(columns=EVENT_RISK_COLUMNS)
 
+        events = self._attach_home_distance(events, employees)
         impossible_event_ids = self._impossible_travel_event_ids(raw_events, route_segments)
         rows = []
         for _, event in events.iterrows():
@@ -128,7 +158,17 @@ class RiskService:
 
         risk = event_risk.copy()
         if risk.empty or "attendance_uid" not in risk.columns:
-            grouped = pd.DataFrame(columns=["attendance_uid", "risk_score", "review_event_count", "high_risk_event_count", "risk_reason_summary"])
+            grouped = pd.DataFrame(
+                columns=[
+                    "attendance_uid",
+                    "risk_score",
+                    "risk_priority_score",
+                    "review_event_count",
+                    "high_risk_event_count",
+                    "low_confidence_event_count",
+                    "risk_reason_summary",
+                ]
+            )
         else:
             if "risk_score" not in risk.columns:
                 risk["risk_score"] = 0
@@ -139,22 +179,26 @@ class RiskService:
             risk["risk_score"] = pd.to_numeric(risk["risk_score"], errors="coerce").fillna(0)
             risk["review_event"] = risk["risk_level"].isin(self._review_levels())
             risk["high_risk_event"] = risk["risk_level"].isin(self._high_risk_levels())
+            risk["low_confidence_event"] = risk["risk_level"].eq(LOW_CONFIDENCE_LABEL)
             grouped = (
                 risk.groupby("attendance_uid", dropna=False)
                 .agg(
                     risk_score=("risk_score", "sum"),
+                    risk_priority_score=("risk_reason_codes", self._daily_event_priority_score),
                     review_event_count=("review_event", "sum"),
                     high_risk_event_count=("high_risk_event", "sum"),
+                    low_confidence_event_count=("low_confidence_event", "sum"),
                     risk_reason_summary=("risk_reason_codes", self._join_reason_codes),
                 )
                 .reset_index()
             )
 
         result = result.merge(grouped, on="attendance_uid", how="left")
-        for column in ["risk_score", "review_event_count", "high_risk_event_count"]:
+        for column in ["risk_score", "risk_priority_score", "review_event_count", "high_risk_event_count", "low_confidence_event_count"]:
             result[column] = pd.to_numeric(result[column], errors="coerce").fillna(0)
         result["review_event_count"] = result["review_event_count"].astype(int)
         result["high_risk_event_count"] = result["high_risk_event_count"].astype(int)
+        result["low_confidence_event_count"] = result["low_confidence_event_count"].astype(int)
         result["risk_reason_summary"] = result["risk_reason_summary"].fillna("")
 
         home_trace = self._build_home_trace_risk(result, raw_events, employees, matches)
@@ -174,7 +218,13 @@ class RiskService:
             + result["home_start_end_without_field_trace"] * REASON_WEIGHTS["home_start_end_without_field_trace"]
             + result["insufficient_route_evidence"] * REASON_WEIGHTS["insufficient_route_evidence"]
         )
+        result["risk_priority_score"] = result["risk_priority_score"] + (
+            result["home_area_only_trace"] * DAILY_PRIORITY_WEIGHTS["home_area_only_trace"]
+            + result["home_start_end_without_field_trace"] * DAILY_PRIORITY_WEIGHTS["home_start_end_without_field_trace"]
+            + result["insufficient_route_evidence"] * DAILY_PRIORITY_WEIGHTS["insufficient_route_evidence"]
+        )
         result["risk_reason_summary"] = result.apply(self._merge_daily_reason_summary, axis=1)
+        result["risk_priority_rate"] = result["risk_priority_score"] / result["gps_event_count"].clip(lower=1)
         result["risk_rate"] = result["risk_score"] / result["gps_event_count"].clip(lower=1)
         result["risk_level"] = result.apply(self._daily_level, axis=1)
         return result.reindex(columns=DAILY_RISK_COLUMNS)
@@ -187,8 +237,10 @@ class RiskService:
         for column in [
             "gps_event_count",
             "risk_score",
+            "risk_priority_score",
             "review_event_count",
             "high_risk_event_count",
+            "low_confidence_event_count",
             "home_area_only_trace",
             "home_start_end_without_field_trace",
             "insufficient_route_evidence",
@@ -206,8 +258,10 @@ class RiskService:
                 attendance_days=("attendance_uid", "count"),
                 gps_event_count=("gps_event_count", "sum"),
                 risk_score=("risk_score", "sum"),
+                risk_priority_score=("risk_priority_score", "sum"),
                 review_event_count=("review_event_count", "sum"),
                 high_risk_event_count=("high_risk_event_count", "sum"),
+                low_confidence_event_count=("low_confidence_event_count", "sum"),
                 home_area_only_days=("home_area_only_trace", "sum"),
                 home_start_end_without_field_days=("home_start_end_without_field_trace", "sum"),
                 insufficient_route_evidence_days=("insufficient_route_evidence", "sum"),
@@ -215,10 +269,11 @@ class RiskService:
             .reset_index()
         )
         grouped["risk_rate"] = grouped["risk_score"] / grouped["gps_event_count"].clip(lower=1)
+        grouped["risk_priority_rate"] = grouped["risk_priority_score"] / grouped["attendance_days"].clip(lower=1)
         grouped["review_rate"] = grouped["review_event_count"] / grouped["gps_event_count"].clip(lower=1)
         grouped["risk_level"] = grouped.apply(self._employee_level, axis=1)
         return grouped.reindex(columns=EMPLOYEE_RISK_COLUMNS).sort_values(
-            ["risk_rate", "risk_score"], ascending=[False, False]
+            ["risk_priority_rate", "risk_priority_score", "risk_rate"], ascending=[False, False, False]
         )
 
     def _build_home_trace_risk(
@@ -337,6 +392,18 @@ class RiskService:
             reasons.update(code for code in value.split(",") if code)
         return ",".join(sorted(reasons))
 
+    @staticmethod
+    def _daily_event_priority_score(values: pd.Series) -> float:
+        reason_counts: dict[str, int] = {}
+        for value in values.dropna().astype(str):
+            for code in [code for code in value.split(",") if code]:
+                reason_counts[code] = reason_counts.get(code, 0) + 1
+        score = 0.0
+        for code, count in reason_counts.items():
+            capped_count = min(count, DAILY_PRIORITY_CAPS.get(code, count))
+            score += DAILY_PRIORITY_WEIGHTS.get(code, REASON_WEIGHTS.get(code, 0)) * capped_count
+        return score
+
     def _merge_daily_reason_summary(self, row: pd.Series) -> str:
         reasons = set(str(row.get("risk_reason_summary", "") or "").split(",")) - {""}
         if row.get("home_area_only_trace", 0):
@@ -347,21 +414,55 @@ class RiskService:
             reasons.add("insufficient_route_evidence")
         return ",".join(sorted(reasons))
 
+    def _attach_home_distance(self, events: pd.DataFrame, employees: pd.DataFrame | None) -> pd.DataFrame:
+        events = events.copy()
+        events["distance_from_home_m"] = None
+        if employees is None or employees.empty:
+            return events
+        if not {"employee_id", "home_lat", "home_lon"}.issubset(employees.columns):
+            return events
+        if not {"employee_id", "gps_lat", "gps_lon"}.issubset(events.columns):
+            return events
+
+        employee_home = (
+            employees.dropna(subset=["home_lat", "home_lon"])[["employee_id", "home_lat", "home_lon"]]
+            .drop_duplicates(subset=["employee_id"], keep="first")
+            .copy()
+        )
+        if employee_home.empty:
+            return events
+
+        with_home = events.merge(employee_home, on="employee_id", how="left")
+        with_home["distance_from_home_m"] = with_home.apply(
+            lambda row: (
+                haversine_meter(row["gps_lat"], row["gps_lon"], row["home_lat"], row["home_lon"])
+                if pd.notna(row.get("gps_lat"))
+                and pd.notna(row.get("gps_lon"))
+                and pd.notna(row.get("home_lat"))
+                and pd.notna(row.get("home_lon"))
+                else None
+            ),
+            axis=1,
+        )
+        return with_home.drop(columns=["home_lat", "home_lon"], errors="ignore")
+
     def _daily_level(self, row: pd.Series) -> str:
-        if row["high_risk_event_count"] > 0 or row["risk_score"] >= 10:
+        priority = float(row.get("risk_priority_score", 0) or 0)
+        if row["high_risk_event_count"] > 0 or priority >= 20:
             return HIGH_RISK_LABEL
-        if row["review_event_count"] > 0 or row.get("home_area_only_trace", 0) or row.get("home_start_end_without_field_trace", 0):
+        if row["review_event_count"] > 0 or row.get("home_start_end_without_field_trace", 0) or priority >= 8:
             return REVIEW_LABEL
-        if row["risk_score"] > 0:
+        if row["risk_score"] > 0 or priority > 0:
             return LOW_CONFIDENCE_LABEL
         return NORMAL_LABEL
 
     def _employee_level(self, row: pd.Series) -> str:
-        if row["high_risk_event_count"] > 0 or row["home_area_only_days"] > 0 or row["risk_rate"] >= 4:
+        priority_rate = float(row.get("risk_priority_rate", 0) or 0)
+        if row["high_risk_event_count"] > 0 or row["home_area_only_days"] > 0 or priority_rate >= 12:
             return HIGH_RISK_LABEL
-        if row["review_event_count"] > 0 or row["home_start_end_without_field_days"] > 0 or row["risk_rate"] >= 2:
+        if row["review_event_count"] > 0 or row["home_start_end_without_field_days"] > 0 or priority_rate >= 6:
             return REVIEW_LABEL
-        if row["risk_score"] > 0:
+        if row["risk_score"] > 0 or row.get("risk_priority_score", 0) > 0:
             return LOW_CONFIDENCE_LABEL
         return NORMAL_LABEL
 
@@ -390,6 +491,10 @@ class RiskService:
         selected_rank = None
         selected_name = None
         nearest_name = None
+        distance_from_home = self._optional_float(event.get("distance_from_home_m"))
+
+        if distance_from_home is not None and distance_from_home <= float(self.config.risk_home_radius_m):
+            reason_codes.append("near_home_checkin")
 
         if candidates.empty:
             reason_codes.append("no_reasonable_candidate")
@@ -456,11 +561,13 @@ class RiskService:
                 selected_rank,
                 nearest_name,
                 nearest_distance,
+                distance_from_home,
             ),
             "selected_distance_m": selected_distance,
             "nearest_distance_m": nearest_distance,
             "distance_gap_m": distance_gap,
             "selected_rank": selected_rank,
+            "distance_from_home_m": distance_from_home,
         }
 
     def _risk_level(self, score: int, reason_codes: list[str]) -> str:
@@ -483,6 +590,7 @@ class RiskService:
         selected_rank: int | None,
         nearest_name: Any,
         nearest_distance: float | None,
+        distance_from_home: float | None,
     ) -> str:
         text: list[str] = []
         if "far_customer_override" in reason_codes:
@@ -491,6 +599,8 @@ class RiskService:
                 f"選取 {selected_name or '未知院所'} {self._format_distance(selected_distance)}，"
                 f"最近 {nearest_name or '未知院所'} {self._format_distance(nearest_distance)}"
             )
+        if "near_home_checkin" in reason_codes:
+            text.append(f"打卡點距住家 {self._format_distance(distance_from_home)}，可能在住家附近打卡")
         if "selected_not_top5" in reason_codes:
             text.append(f"選取候選排名第 {selected_rank}，超出前 5 名")
         if "selected_distance_too_far" in reason_codes:
@@ -581,6 +691,13 @@ class RiskService:
         if pd.isna(value):
             return None
         return int(value)
+
+    @staticmethod
+    def _optional_float(value: Any) -> float | None:
+        numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+        if pd.isna(numeric):
+            return None
+        return float(numeric)
 
     @staticmethod
     def _format_distance(value: float | None) -> str:

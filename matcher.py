@@ -30,11 +30,17 @@ class Matcher:
         hospital_keywords: tuple[str, ...] | list[str] | None = None,
         hospital_exclude_keywords: tuple[str, ...] | list[str] | None = None,
         hospital_priority_distance_m: float = 1000.0,
+        existing_client_priority_distance_m: float | None = None,
     ):
         self.top_n = top_n
         self.hospital_keywords = tuple(hospital_keywords or ("醫院", "衛生所", "療養院"))
         self.hospital_exclude_keywords = tuple(hospital_exclude_keywords or ("診所", "藥局"))
         self.hospital_priority_distance_m = float(hospital_priority_distance_m)
+        self.existing_client_priority_distance_m = (
+            float(existing_client_priority_distance_m)
+            if existing_client_priority_distance_m is not None
+            else float(hospital_priority_distance_m)
+        )
 
     def _is_hospital_facility(self, name: str) -> bool:
         text = str(name or "").strip()
@@ -108,14 +114,16 @@ class Matcher:
             )
             candidates["selection_priority"] = candidates.apply(
                 lambda row: 0
-                if row["is_existing_client"]
+                if row["is_existing_client"] and row["beeline_meter"] <= self.existing_client_priority_distance_m
                 else 1
                 if row["is_hospital_facility"] and row["beeline_meter"] <= self.hospital_priority_distance_m
-                else 2,
+                else 2
+                if row["is_existing_client"]
+                else 3,
                 axis=1,
             )
             candidates["selection_type"] = candidates["selection_priority"].map(
-                {0: "既有客戶", 1: "醫院", 2: "潛在院所"}
+                {0: "既有客戶", 1: "醫院", 2: "既有客戶", 3: "潛在院所"}
             )
             best_rank = int(
                 candidates.sort_values(

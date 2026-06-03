@@ -14,6 +14,33 @@ outputs/
 *.sqlite3
 *.xlsx
 *.xls
+*.pdf
+
+# Local real data. Keep demo_data/ tracked for public/demo use.
+/employees.csv
+/existing_clients.csv
+/hospitals.csv
+/monthly_claims.csv
+/attendance_aux.csv
+/hospital_master_clean.csv
+/client_master.csv
+/employee_master.csv
+/raw_check_events.csv
+/route_stop_match.csv
+/daily_route_summary.csv
+/attendance_day_group.csv
+/finance_audit_result.csv
+/*.backup_*.csv
+/hospitals.backup_*.csv
+
+# Local secrets and Streamlit/runtime settings.
+.env
+.env.*
+.streamlit/secrets.toml
+settings.local.json
+*secret*
+*token*
+*credential*
 
 .DS_Store
 Thumbs.db

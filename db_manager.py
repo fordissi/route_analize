@@ -126,7 +126,8 @@ CREATE TABLE IF NOT EXISTS event_risk_review (
     selected_distance_m REAL,
     nearest_distance_m REAL,
     distance_gap_m REAL,
-    selected_rank INTEGER
+    selected_rank INTEGER,
+    distance_from_home_m REAL
 );
 
 CREATE TABLE IF NOT EXISTS daily_risk_summary (
@@ -137,9 +138,12 @@ CREATE TABLE IF NOT EXISTS daily_risk_summary (
     work_date TEXT,
     gps_event_count INTEGER,
     risk_score REAL,
+    risk_priority_score REAL,
+    risk_priority_rate REAL,
     risk_rate REAL,
     review_event_count INTEGER,
     high_risk_event_count INTEGER,
+    low_confidence_event_count INTEGER,
     home_area_only_trace INTEGER,
     home_start_end_without_field_trace INTEGER,
     insufficient_route_evidence INTEGER,
@@ -157,10 +161,13 @@ CREATE TABLE IF NOT EXISTS employee_risk_summary (
     attendance_days INTEGER,
     gps_event_count INTEGER,
     risk_score REAL,
+    risk_priority_score REAL,
+    risk_priority_rate REAL,
     risk_rate REAL,
     review_rate REAL,
     review_event_count INTEGER,
     high_risk_event_count INTEGER,
+    low_confidence_event_count INTEGER,
     home_area_only_days INTEGER,
     home_start_end_without_field_days INTEGER,
     insufficient_route_evidence_days INTEGER,
@@ -293,6 +300,7 @@ class DatabaseManager:
         with self.connect() as conn:
             conn.executescript(SCHEMA_SQL)
             self._migrate_route_tables(conn)
+            self._migrate_risk_tables(conn)
 
     def replace_table(self, conn: sqlite3.Connection, table_name: str, dataframe) -> None:
         if table_name in SCHEMA_PRESERVED_TABLES:
@@ -344,3 +352,9 @@ class DatabaseManager:
                     "UPDATE google_route_summary SET attendance_key = ? WHERE attendance_uid = ?",
                     (derived, attendance_uid),
                 )
+
+    def _migrate_risk_tables(self, conn: sqlite3.Connection) -> None:
+        for table_name in ["daily_risk_summary", "employee_risk_summary"]:
+            self._ensure_column(conn, table_name, "risk_priority_score", "REAL")
+            self._ensure_column(conn, table_name, "risk_priority_rate", "REAL")
+            self._ensure_column(conn, table_name, "low_confidence_event_count", "INTEGER")

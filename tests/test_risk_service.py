@@ -28,6 +28,8 @@ def test_risk_threshold_defaults_are_available() -> None:
 
     assert config.risk_review_distance_m == 1000.0
     assert config.risk_high_distance_m == 1500.0
+    assert config.hospital_priority_distance_m == 1000.0
+    assert config.existing_client_priority_distance_m == 1000.0
     assert config.risk_customer_override_gap_m == 500.0
     assert config.risk_home_radius_m == 500.0
 
@@ -117,6 +119,64 @@ def test_nearby_candidate_conflict_is_low_confidence() -> None:
 
     assert result.iloc[0]["risk_level"] == "低信心"
     assert "nearby_candidate_conflict" in result.iloc[0]["risk_reason_codes"]
+
+
+def test_near_home_checkin_is_scored_at_event_level() -> None:
+    raw_events = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "gps_lat": 24.70000,
+                "gps_lon": 121.77000,
+                "actual_time": "2026-05-08 08:00:00",
+            }
+        ]
+    )
+    employees = pd.DataFrame(
+        [{"employee_id": "A", "home_lat": 24.70010, "home_lon": 121.77010}]
+    )
+    matches = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "candidate_rank": 37,
+                "hospital_id": "c1",
+                "hospital_label": "existing client",
+                "beeline_meter": 1227.0,
+                "is_existing_client": 1,
+                "is_selected": 1,
+                "selection_type": "existing",
+            },
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "candidate_rank": 1,
+                "hospital_id": "h1",
+                "hospital_label": "near clinic",
+                "beeline_meter": 541.0,
+                "is_existing_client": 0,
+                "is_selected": 0,
+                "selection_type": "candidate",
+            },
+        ]
+    )
+
+    result = RiskService(make_config()).build_event_risk(
+        raw_events,
+        matches,
+        pd.DataFrame(),
+        pd.DataFrame(),
+        employees=employees,
+    )
+    row = result.iloc[0]
+
+    assert "near_home_checkin" in row["risk_reason_codes"]
+    assert "selected_not_top5" in row["risk_reason_codes"]
+    assert row["distance_from_home_m"] <= make_config().risk_home_radius_m
+    assert "住家" in row["risk_reason_text"]
 
 
 def test_impossible_travel_time_is_high_risk() -> None:
@@ -329,6 +389,62 @@ def test_employee_summary_normalizes_by_gps_count() -> None:
 
     assert set(daily["attendance_uid"]) == {"a1", "b1"}
     assert employee.sort_values("risk_rate", ascending=False).iloc[0]["employee_id"] == "B"
+
+
+def test_priority_score_caps_repeated_low_confidence_noise_below_home_trace() -> None:
+    event_risk = pd.DataFrame(
+        [
+            {
+                "event_uid": f"a1e{index}",
+                "attendance_uid": "a1",
+                "risk_level": "低信心",
+                "risk_score": 2,
+                "risk_reason_codes": "nearby_candidate_conflict",
+            }
+            for index in range(10)
+        ]
+        + [
+            {"event_uid": "b1e1", "attendance_uid": "b1", "risk_level": "正常", "risk_score": 0, "risk_reason_codes": ""},
+            {"event_uid": "b1e2", "attendance_uid": "b1", "risk_level": "正常", "risk_score": 0, "risk_reason_codes": ""},
+        ]
+    )
+    attendance = pd.DataFrame(
+        [
+            {"attendance_uid": "a1", "employee_id": "A", "employee_name": "員工A", "department": "業務", "work_date": "2026-05-08", "gps_event_count": 10},
+            {"attendance_uid": "b1", "employee_id": "B", "employee_name": "員工B", "department": "業務", "work_date": "2026-05-08", "gps_event_count": 2},
+        ]
+    )
+    raw_events = pd.DataFrame(
+        [
+            {"event_uid": f"a1e{index}", "attendance_uid": "a1", "employee_id": "A", "gps_lat": 24.90, "gps_lon": 121.20}
+            for index in range(10)
+        ]
+        + [
+            {"event_uid": "b1e1", "attendance_uid": "b1", "employee_id": "B", "gps_lat": 24.70010, "gps_lon": 121.77010},
+            {"event_uid": "b1e2", "attendance_uid": "b1", "employee_id": "B", "gps_lat": 24.70020, "gps_lon": 121.77020},
+        ]
+    )
+    employees = pd.DataFrame(
+        [
+            {"employee_id": "A", "home_lat": 24.00, "home_lon": 121.00},
+            {"employee_id": "B", "home_lat": 24.70010, "home_lon": 121.77010},
+        ]
+    )
+
+    daily = RiskService(make_config()).build_daily_risk_summary(
+        event_risk,
+        attendance,
+        raw_events=raw_events,
+        employees=employees,
+        matches=pd.DataFrame(),
+    )
+    noisy = daily.loc[daily["attendance_uid"] == "a1"].iloc[0]
+    home_only = daily.loc[daily["attendance_uid"] == "b1"].iloc[0]
+
+    assert noisy["risk_score"] > home_only["risk_score"]
+    assert noisy["low_confidence_event_count"] == 10
+    assert noisy["risk_priority_score"] < home_only["risk_priority_score"]
+    assert home_only["home_area_only_trace"] == 1
 
 
 def test_daily_summary_counts_high_risk_event_label() -> None:

@@ -25,6 +25,8 @@ class AppConfig:
     candidate_top_n: int = 5
     confidence_distance_m: float = 300.0
     ambiguous_distance_m: float = 500.0
+    hospital_priority_distance_m: float = 1000.0
+    existing_client_priority_distance_m: float = 1000.0
     risk_review_distance_m: float = 1000.0
     risk_high_distance_m: float = 1500.0
     risk_auto_select_max_distance_m: float = 2000.0
@@ -53,6 +55,8 @@ CONFIG_OVERRIDE_FIELDS = {
     "candidate_top_n",
     "confidence_distance_m",
     "ambiguous_distance_m",
+    "hospital_priority_distance_m",
+    "existing_client_priority_distance_m",
     "risk_review_distance_m",
     "risk_high_distance_m",
     "risk_auto_select_max_distance_m",
@@ -83,6 +87,8 @@ def _coerce_override(field_name: str, value):
         "average_speed_kmph",
         "confidence_distance_m",
         "ambiguous_distance_m",
+        "hospital_priority_distance_m",
+        "existing_client_priority_distance_m",
         "risk_review_distance_m",
         "risk_high_distance_m",
         "risk_auto_select_max_distance_m",

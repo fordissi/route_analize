@@ -1,3 +1,5 @@
-﻿員工編號,姓名,department,Home_Lat,Home_Lon,fuel_rate_override,maintenance_rate_override
-E001,張守規,業務一部,25.03,121.55,,
-E002,李繞路,業務二部,25.06,121.6,,
+﻿員工編號,姓名,department,demo_persona,Home_Lat,Home_Lon,office_lat,office_lon,base_commute_km,fuel_rate_override,maintenance_rate_override,job_grade
+A001,林北醫,北區醫院業務部,北區醫院業務,25.032,121.565,25.047,121.517,,,,P3
+B001,陳南院,南區醫院業務部,南區醫院業務,22.666,120.303,22.627,120.301,,,,P3
+C001,張北診,北區基層通路部,北區診所藥局業務,25.015,121.463,25.047,121.517,,,,P3
+D001,吳中區,中區混合通路部,中區混合業務,24.162,120.647,24.151,120.646,,,,P3

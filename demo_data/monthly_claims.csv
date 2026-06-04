@@ -1,3 +1,17 @@
 ﻿year_month,employee_id,claimed_km,claim_source,submitted_at,remark
-2026-04,E001,15.0,manual,2026-05-01 10:00:00,誠實申報
-2026-04,E002,85.0,manual,2026-05-01 10:00:00,大繞路報虛假里程
+2026-02,A001,194.4,demo_mock,2026-03-02 10:00:00,北區醫院業務 demo trend month 1
+2026-02,B001,248.4,demo_mock,2026-03-02 10:00:00,南區醫院業務 demo trend month 1
+2026-02,C001,172.8,demo_mock,2026-03-02 10:00:00,北區診所藥局業務 demo trend month 1
+2026-02,D001,212.4,demo_mock,2026-03-02 10:00:00,中區混合業務 demo trend month 1
+2026-03,A001,213.8,demo_mock,2026-04-02 10:00:00,北區醫院業務 demo trend month 2
+2026-03,B001,309.1,demo_mock,2026-04-02 10:00:00,南區醫院業務 demo trend month 2
+2026-03,C001,182.4,demo_mock,2026-04-02 10:00:00,北區診所藥局業務 demo trend month 2
+2026-03,D001,233.6,demo_mock,2026-04-02 10:00:00,中區混合業務 demo trend month 2
+2026-04,A001,233.3,demo_mock,2026-05-02 10:00:00,北區醫院業務 demo trend month 3
+2026-04,B001,369.8,demo_mock,2026-05-02 10:00:00,南區醫院業務 demo trend month 3
+2026-04,C001,192.0,demo_mock,2026-05-02 10:00:00,北區診所藥局業務 demo trend month 3
+2026-04,D001,254.9,demo_mock,2026-05-02 10:00:00,中區混合業務 demo trend month 3
+2026-05,A001,252.7,demo_mock,2026-06-02 10:00:00,北區醫院業務 demo trend month 4
+2026-05,B001,430.6,demo_mock,2026-06-02 10:00:00,南區醫院業務 demo trend month 4
+2026-05,C001,201.6,demo_mock,2026-06-02 10:00:00,北區診所藥局業務 demo trend month 4
+2026-05,D001,276.1,demo_mock,2026-06-02 10:00:00,中區混合業務 demo trend month 4

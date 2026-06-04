@@ -74,7 +74,9 @@ py -m streamlit run app.py
 
 正式版 repo 的根目錄資料檔，例如 `employees.csv`、`hospitals.csv`、`existing_clients.csv`、`monthly_claims.csv` 與打卡 Excel，視為本機資料來源。`.gitignore` 已排除多數正式資料、輸出結果、資料庫與 PDF，以避免誤提交敏感資訊。
 
-`demo_data/` 則是可追蹤的展示資料，用於本機 demo 與功能驗證；公開部署用的 standalone demo 仍以 `route-audit-demo` repo 為主。
+`demo_data/` 則是可追蹤的小型展示 fixture，用於本機 demo 生成器與功能驗證；其中院所資料只保留足以覆蓋北區醫院、南區醫院、北區診所藥局與中區混合通路的少量公開資料。公開部署用的 standalone demo 仍以 `route-audit-demo` repo 為主。
+
+歷史產出的 sample PDF、正式根目錄 CSV 與打卡 Excel 都應留在本機，不納入 Git 追蹤。若需要重新產生 PDF 範例，請從 Streamlit app 或匯出器產出到 `outputs/reports/`。
 
 ## 測試
 

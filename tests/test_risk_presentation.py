@@ -5,7 +5,9 @@ import pandas as pd
 from risk_presentation import (
     add_daily_risk_drilldown_columns,
     add_event_risk_drilldown_columns,
+    add_month_axis_columns,
     add_overview_risk_drilldown_columns,
+    prepare_month_axis_for_pdf,
     build_company_monthly_risk_trend,
     build_employee_monthly_warming,
     build_monthly_risk_trend,
@@ -256,6 +258,59 @@ def test_build_monthly_risk_trend_normalizes_by_attendance_days():
     assert march["claim_diff_abs_rate"] == 0.2
     april = trend.loc[trend["year_month"] == "2026-04"].iloc[0]
     assert april["claim_diff_abs_rate"] == 0.5
+
+
+def test_add_month_axis_columns_keeps_months_as_category_labels():
+    monthly = pd.DataFrame(
+        [
+            {"year_month": "2026-03", "value": 3},
+            {"year_month": "2026-01", "value": 1},
+            {"year_month": "2026-02", "value": 2},
+        ]
+    )
+
+    result, month_order = add_month_axis_columns(monthly)
+
+    assert result["month_label"].tolist() == ["2026-03", "2026-01", "2026-02"]
+    assert result["month_index"].tolist() == [2, 0, 1]
+    assert month_order == ["2026-01", "2026-02", "2026-03"]
+
+
+def test_prepare_month_axis_for_pdf_limits_months_and_samples_ticks():
+    monthly = pd.DataFrame(
+        [
+            {"year_month": f"2025-{month:02d}", "value": month}
+            for month in range(1, 13)
+        ]
+        + [
+            {"year_month": f"2026-{month:02d}", "value": month + 12}
+            for month in range(1, 7)
+        ]
+    )
+
+    result, month_order, tickvals, ticktext = prepare_month_axis_for_pdf(monthly, max_months=12, max_ticks=6)
+
+    assert month_order == [
+        "2025-07",
+        "2025-08",
+        "2025-09",
+        "2025-10",
+        "2025-11",
+        "2025-12",
+        "2026-01",
+        "2026-02",
+        "2026-03",
+        "2026-04",
+        "2026-05",
+        "2026-06",
+    ]
+    assert result["year_month"].tolist() == month_order
+    assert result["month_index"].tolist() == list(range(12))
+    assert tickvals[0] == 0
+    assert ticktext[0] == "2025-07"
+    assert tickvals[-1] == 11
+    assert ticktext[-1] == "2026-06"
+    assert len(tickvals) <= 6
 
 
 def test_build_employee_monthly_warming_compares_latest_month_to_history():

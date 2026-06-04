@@ -125,6 +125,63 @@ def build_monthly_risk_trend(daily_risk: pd.DataFrame, monthly_claims: pd.DataFr
     return grouped[columns].sort_values(["year_month", "employee_label"]).reset_index(drop=True)
 
 
+def add_month_axis_columns(
+    dataframe: pd.DataFrame,
+    *,
+    source_col: str = "year_month",
+    label_col: str = "month_label",
+) -> tuple[pd.DataFrame, list[str]]:
+    if dataframe.empty or source_col not in dataframe.columns:
+        result = dataframe.copy()
+        result[label_col] = []
+        return result, []
+
+    result = dataframe.copy()
+    result[source_col] = result[source_col].astype(str)
+    result[label_col] = result[source_col]
+    month_order = sorted(result[source_col].dropna().unique().tolist())
+    month_index = {month: index for index, month in enumerate(month_order)}
+    result["month_index"] = result[source_col].map(month_index)
+    return result, month_order
+
+
+def prepare_month_axis_for_pdf(
+    dataframe: pd.DataFrame,
+    *,
+    source_col: str = "year_month",
+    label_col: str = "month_label",
+    max_months: int = 12,
+    max_ticks: int = 12,
+) -> tuple[pd.DataFrame, list[str], list[int], list[str]]:
+    if dataframe.empty or source_col not in dataframe.columns:
+        result = dataframe.copy()
+        result[label_col] = []
+        return result, [], [], []
+
+    indexed, month_order = add_month_axis_columns(dataframe, source_col=source_col, label_col=label_col)
+    if max_months > 0 and len(month_order) > max_months:
+        month_order = month_order[-max_months:]
+        indexed = indexed.loc[indexed[source_col].astype(str).isin(month_order)].copy()
+        month_index = {month: index for index, month in enumerate(month_order)}
+        indexed["month_index"] = indexed[source_col].astype(str).map(month_index)
+        indexed[label_col] = indexed[source_col].astype(str)
+    indexed = indexed.sort_values("month_index").reset_index(drop=True)
+
+    if not month_order:
+        return indexed, [], [], []
+    if max_ticks <= 0 or len(month_order) <= max_ticks:
+        tick_indices = list(range(len(month_order)))
+    else:
+        step = max(1, (len(month_order) - 1) // (max_ticks - 1))
+        tick_indices = list(range(0, len(month_order), step))
+        if tick_indices[-1] != len(month_order) - 1:
+            tick_indices.append(len(month_order) - 1)
+        while len(tick_indices) > max_ticks and len(tick_indices) > 2:
+            tick_indices.pop(-2)
+    ticktext = [month_order[index] for index in tick_indices]
+    return indexed, month_order, tick_indices, ticktext
+
+
 def build_company_monthly_risk_trend(monthly_trend: pd.DataFrame) -> pd.DataFrame:
     columns = [
         "year_month",

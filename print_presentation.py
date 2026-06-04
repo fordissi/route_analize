@@ -27,6 +27,9 @@ def build_print_table_html(
     print_view = dataframe.copy()
     if columns is not None:
         print_view = print_view[[column for column in columns if column in print_view.columns]].copy()
+    is_wide_detail_table = len(print_view.columns) >= 15
+    if max_rows is None and is_wide_detail_table:
+        max_rows = 16
     if max_rows is not None and max_rows > 0:
         original_count = len(print_view)
         print_view = print_view.head(max_rows).copy()
@@ -45,6 +48,8 @@ def build_print_table_html(
     class_tokens = ["print-table"]
     if table_class:
         class_tokens.extend(token for token in table_class.split() if token)
+    if is_wide_detail_table:
+        class_tokens.extend(["print-table--compact", "period-detail-table"])
 
     title_html = f'<div class="print-section-title">{html.escape(title)}</div>' if title else ""
     head_cells = []

@@ -42,6 +42,7 @@ from risk_service import HIGH_RISK_LABEL, LOW_CONFIDENCE_LABEL, NORMAL_LABEL, RE
 from risk_presentation import (
     add_daily_risk_drilldown_columns,
     add_event_risk_drilldown_columns,
+    add_month_axis_columns,
     add_overview_risk_drilldown_columns,
     build_company_monthly_risk_trend,
     build_employee_monthly_warming,
@@ -51,6 +52,13 @@ from risk_presentation import (
 )
 from print_presentation import build_print_table_html
 from map_presentation import build_padded_map_view
+from overview_pdf_exporter import build_overview_pdf_bytes, build_overview_pdf_context
+from personal_period_pdf_exporter import build_personal_period_pdf_bytes, build_personal_period_pdf_context
+from personal_period_batch_exporter import (
+    PersonalPeriodBatchPdfInput,
+    build_personal_period_batch_pdf_zip,
+    safe_report_filename,
+)
 
 
 st.set_page_config(page_title="Function Route Report", layout="wide")
@@ -500,8 +508,8 @@ st.markdown(
     }
     @media print {
         @page {
-            size: A4 landscape;
-            margin: 15mm;
+            size: A4 portrait;
+            margin: 8mm 10mm;
         }
 
         html,
@@ -520,7 +528,7 @@ st.markdown(
             background-image: none !important;
             color: #000000 !important;
             font-size: 9.5pt !important;
-            line-height: 1.35 !important;
+            line-height: 1.28 !important;
             box-shadow: none !important;
             overflow: visible !important;
         }
@@ -569,6 +577,10 @@ st.markdown(
             width: 100% !important;
             max-width: 100% !important;
             padding: 0 !important;
+        }
+
+        body:has(.period-print-header) .block-container {
+            zoom: 0.74 !important;
         }
 
         h1,
@@ -736,7 +748,7 @@ st.markdown(
         .js-plotly-plot {
             width: 100% !important;
             max-width: 100% !important;
-            height: 100mm !important;
+            height: 82mm !important;
             max-height: none !important;
             background: inherit !important;
             border: 0 !important;
@@ -790,9 +802,264 @@ st.markdown(
             overflow: visible !important;
         }
 
+        .period-print-header {
+            display: block !important;
+            border: 1pt solid #000000 !important;
+            padding: 4pt 6pt !important;
+            margin: 0 0 5pt 0 !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+
+        .period-print-title {
+            font-size: 12.5pt !important;
+            font-weight: 800 !important;
+            margin: 0 0 2pt 0 !important;
+        }
+
+        .period-print-meta {
+            font-size: 8pt !important;
+            line-height: 1.25 !important;
+        }
+
+        .period-print-page-break {
+            display: block !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            break-before: page !important;
+            page-break-before: always !important;
+        }
+
+        .period-print-omit {
+            display: none !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.period-print-omit) {
+            display: none !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.period-print-omit-rest),
+        div[data-testid="stElementContainer"]:has(.period-print-omit-rest) ~ div[data-testid="stElementContainer"],
+        div[data-testid="stElementContainer"]:has(.period-print-omit-rest) ~ div[data-testid="stHorizontalBlock"],
+        div[data-testid="stElementContainer"]:has(.period-print-omit-rest) ~ div[data-testid="stLayoutWrapper"] {
+            display: none !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.period-print-page-break) {
+            display: block !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            break-before: page !important;
+            page-break-before: always !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.period-print-omit) + div[data-testid="stElementContainer"] {
+            display: none !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) {
+            display: none !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stHorizontalBlock"],
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stLayoutWrapper"] {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            margin-bottom: 8pt !important;
+            overflow: hidden !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"],
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stLayoutWrapper"] div[data-testid="stColumn"] {
+            overflow: hidden !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stHorizontalBlock"] [data-testid="stPlotlyChart"],
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stHorizontalBlock"] [data-testid="stFullScreenFrame"],
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stLayoutWrapper"] [data-testid="stPlotlyChart"],
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stLayoutWrapper"] [data-testid="stFullScreenFrame"] {
+            height: 60mm !important;
+            min-height: 60mm !important;
+            max-height: 60mm !important;
+            overflow: hidden !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stHorizontalBlock"] .js-plotly-plot,
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stHorizontalBlock"] .plot-container,
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stHorizontalBlock"] .svg-container,
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stHorizontalBlock"] .main-svg,
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stLayoutWrapper"] .js-plotly-plot,
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stLayoutWrapper"] .plot-container,
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stLayoutWrapper"] .svg-container,
+        div[data-testid="stElementContainer"]:has(.period-risk-trend-print) + div[data-testid="stLayoutWrapper"] .main-svg {
+            height: 60mm !important;
+            max-height: 60mm !important;
+            overflow: hidden !important;
+            transform: none !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+            margin-bottom: 2pt !important;
+        }
+
+        div[data-testid="stMetric"] {
+            padding: 2pt 3pt !important;
+            margin-bottom: 2pt !important;
+        }
+
+        [data-testid="stMetricLabel"] {
+            font-size: 6.8pt !important;
+            line-height: 1.05 !important;
+        }
+
+        .period-risk-focus-table .print-table,
+        .period-detail-table .print-table {
+            font-size: 6.4pt !important;
+            line-height: 1.1 !important;
+            table-layout: fixed !important;
+        }
+
+        .period-risk-focus-table th,
+        .period-risk-focus-table td,
+        .period-detail-table th,
+        .period-detail-table td {
+            padding: 2pt 2.5pt !important;
+        }
+
+        .period-detail-table {
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.print-ranking-grid) {
+            display: none !important;
+        }
+
+        .print-ranking-grid {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 5pt !important;
+            margin: 0 0 8pt 0 !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+
+        .print-ranking-card {
+            flex: 0 0 calc(50% - 3pt) !important;
+            box-sizing: border-box !important;
+            border: 1pt solid #000000 !important;
+            padding: 3pt 4pt !important;
+            min-height: 20mm !important;
+            background: #ffffff !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+
+        .print-ranking-title {
+            font-size: 8pt !important;
+            font-weight: 800 !important;
+            margin-bottom: 3pt !important;
+        }
+
+        .print-ranking-card ol {
+            margin: 0 !important;
+            padding: 0 !important;
+            list-style: none !important;
+        }
+
+        .print-ranking-card li {
+            display: grid !important;
+            grid-template-columns: 12pt 1fr auto !important;
+            gap: 3pt !important;
+            font-size: 7pt !important;
+            line-height: 1.2 !important;
+            padding: 1pt 0 !important;
+            border-bottom: 0.4pt solid #cccccc !important;
+        }
+
+        .print-ranking-card li:last-child {
+            border-bottom: 0 !important;
+        }
+
+        .print-ranking-value {
+            font-weight: 700 !important;
+            white-space: nowrap !important;
+        }
+
+        body:has(.overview-print-section) div[data-testid="stHorizontalBlock"]:has([data-testid="stPlotlyChart"]) {
+            display: block !important;
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+        }
+
+        body:has(.overview-print-section) div[data-testid="stHorizontalBlock"]:has([data-testid="stPlotlyChart"]) > div[data-testid="stColumn"] {
+            display: block !important;
+            float: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 0 7pt 0 !important;
+            overflow: visible !important;
+        }
+
+        body:has(.overview-print-section) div[data-testid="stColumn"]:has([data-testid="stPlotlyChart"]) {
+            display: block !important;
+            float: none !important;
+            flex: none !important;
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 0 7pt 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+        }
+
+        body:has(.overview-print-section) [data-testid="stPlotlyChart"],
+        body:has(.overview-print-section) [data-testid="stFullScreenFrame"] {
+            width: 94% !important;
+            max-width: 94% !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            overflow: visible !important;
+            transform: none !important;
+        }
+
+        body:has(.overview-print-section) [data-testid="stPlotlyChart"] .js-plotly-plot,
+        body:has(.overview-print-section) [data-testid="stPlotlyChart"] .plot-container,
+        body:has(.overview-print-section) [data-testid="stPlotlyChart"] .svg-container,
+        body:has(.overview-print-section) [data-testid="stPlotlyChart"] .main-svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow: visible !important;
+            transform: none !important;
+        }
+
+        body:has(.overview-print-section) div[data-testid="stElementContainer"]:has([data-testid="stPlotlyChart"]),
+        body:has(.overview-print-section) div[data-testid="stFullScreenFrame"]:has([data-testid="stPlotlyChart"]) {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            margin-bottom: 4pt !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.overview-chart-heading) {
+            display: none !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.overview-rank-interactive) {
+            display: none !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.overview-rank-interactive) + div[data-testid="stLayoutWrapper"],
+        div[data-testid="stElementContainer"]:has(.overview-rank-interactive) + div[data-testid="stHorizontalBlock"] {
+            display: none !important;
+        }
+
         h3 + div[data-testid="stElementContainer"] + div[data-testid="stElementContainer"] [data-testid="stPlotlyChart"],
         h3 + div[data-testid="stElementContainer"] + div[data-testid="stElementContainer"] .js-plotly-plot {
-            height: 100mm !important;
+            height: 82mm !important;
             max-height: none !important;
         }
 
@@ -867,6 +1134,17 @@ st.markdown(
             overflow: visible !important;
         }
 
+        div[data-testid="stElementContainer"]:has(div[data-testid="stDataFrame"]),
+        div[data-testid="stLayoutWrapper"]:has([data-testid="stDownloadButton"]),
+        div[data-testid="stHorizontalBlock"]:has([data-testid="stDownloadButton"]) {
+            display: none !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            max-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
         .print-only {
             display: block !important;
             width: 100% !important;
@@ -874,6 +1152,12 @@ st.markdown(
             margin: 0 0 8pt 0 !important;
             overflow: visible !important;
             clear: both !important;
+        }
+
+        .print-only.print-ranking-grid {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 5pt !important;
         }
 
         .print-table-block {
@@ -1192,6 +1476,78 @@ def render_clickable_ranking_card(
                     "value_label": value_col,
                     "value": value,
                 }
+
+
+def build_print_ranking_html(title: str, rows: pd.DataFrame, label_col: str, value_col: str, value_type: str = "int") -> str:
+    if rows.empty:
+        items_html = '<li class="print-ranking-empty">無資料</li>'
+    else:
+        item_parts = []
+        for index, (_, row) in enumerate(rows.head(5).iterrows(), start=1):
+            label = str(row.get(label_col, "") or "").strip() or "未命名"
+            value = format_metric_value(row.get(value_col), value_type)
+            item_parts.append(
+                "<li>"
+                f"<span class=\"print-ranking-index\">{index}</span>"
+                f"<span class=\"print-ranking-label\">{html_lib.escape(label)}</span>"
+                f"<span class=\"print-ranking-value\">{html_lib.escape(value)}</span>"
+                "</li>"
+            )
+        items_html = "".join(item_parts)
+    return (
+        '<div class="print-ranking-card">'
+        f"<div class=\"print-ranking-title\">{html_lib.escape(title)}</div>"
+        f"<ol>{items_html}</ol>"
+        "</div>"
+    )
+
+
+def render_print_ranking_grid(rankings: list[tuple[str, pd.DataFrame, str, str, str]]) -> None:
+    cards_html = [
+        build_print_ranking_html(title, rows, label_col, value_col, value_type)
+        for title, rows, label_col, value_col, value_type in rankings
+    ]
+    st.markdown(
+        '<div class="print-only print-ranking-grid">' + "".join(cards_html) + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_overview_chart_heading(title: str) -> None:
+    st.markdown(
+        f'<div class="overview-chart-heading"><strong>{html_lib.escape(title)}</strong></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def apply_overview_chart_print_layout(fig, title: str, *, height: int, margin: dict[str, int]) -> None:
+    chart_text_color = "#111827"
+    axis_text_color = "#374151"
+    fig.update_layout(
+        template="plotly_white",
+        title=dict(text=title, x=0, xanchor="left", font=dict(size=15, color=chart_text_color)),
+        height=height,
+        margin=margin,
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font=dict(color=chart_text_color),
+        legend=dict(font=dict(color=chart_text_color)),
+    )
+    fig.update_xaxes(
+        gridcolor="#e5e7eb",
+        linecolor="#9ca3af",
+        zerolinecolor="#9ca3af",
+        tickfont=dict(color=axis_text_color),
+        title_font=dict(color=axis_text_color),
+    )
+    fig.update_yaxes(
+        gridcolor="#e5e7eb",
+        linecolor="#9ca3af",
+        zerolinecolor="#9ca3af",
+        tickfont=dict(color=axis_text_color),
+        title_font=dict(color=axis_text_color),
+    )
+    fig.update_traces(textfont=dict(color=chart_text_color))
 
 
 def render_overview_drilldown_detail(
@@ -3603,6 +3959,109 @@ def months_in_range(start_date, end_date) -> list[str]:
     return [str(period) for period in pd.period_range(start_ts, end_ts, freq="M")]
 
 
+def build_personal_period_pdf_context_from_data(
+    *,
+    employee_id: str,
+    employee_label: str,
+    start_date,
+    end_date,
+    selected_period: str,
+    attendance: pd.DataFrame,
+    daily_metrics: pd.DataFrame,
+    routes: pd.DataFrame,
+    attendance_event_flags: pd.DataFrame,
+    daily_risk: pd.DataFrame,
+    monthly_claim_comparison: pd.DataFrame,
+    matches: pd.DataFrame,
+    raw_events: pd.DataFrame,
+):
+    summary_df, detail_df = summarize_period(
+        employee_id,
+        start_date,
+        end_date,
+        attendance,
+        daily_metrics,
+        routes,
+        attendance_event_flags,
+        daily_risk,
+    )
+    if summary_df.empty:
+        return None
+
+    period_months = months_in_range(start_date, end_date)
+    period_monthly_claims = monthly_claim_comparison.loc[
+        (monthly_claim_comparison["employee_id"] == employee_id)
+        & (monthly_claim_comparison["year_month"].isin(period_months))
+    ].copy()
+
+    employee_monthly_trend = build_monthly_risk_trend(
+        daily_risk.loc[daily_risk["employee_id"] == employee_id].copy(),
+        monthly_claim_comparison.loc[monthly_claim_comparison["employee_id"] == employee_id].copy(),
+    )
+    selected_end_month = pd.Timestamp(end_date).strftime("%Y-%m")
+    employee_monthly_trend = select_recent_month_window(employee_monthly_trend, selected_end_month, window=6)
+    personal_month_order: list[str] = []
+    if not employee_monthly_trend.empty:
+        employee_monthly_trend, personal_month_order = add_month_axis_columns(employee_monthly_trend)
+
+    employee_attendance_uids = attendance.loc[
+        (attendance["employee_id"] == employee_id)
+        & attendance["work_date"].dt.date.between(start_date, end_date),
+        "attendance_uid",
+    ]
+    employee_matches = matches.loc[matches["attendance_uid"].isin(employee_attendance_uids)].copy()
+    selected_matches = employee_matches.loc[employee_matches["is_selected"] == 1].copy()
+    event_risk_columns = [
+        "event_uid",
+        "risk_level",
+        "risk_score",
+        "risk_reason_codes",
+        "risk_reason_text",
+        "selected_distance_m",
+        "nearest_distance_m",
+        "distance_gap_m",
+        "selected_rank",
+        "distance_from_home_m",
+    ]
+    available_event_risk_columns = [column for column in event_risk_columns if column in raw_events.columns]
+    if "event_uid" in selected_matches.columns and "event_uid" in available_event_risk_columns:
+        selected_matches = selected_matches.merge(
+            raw_events[available_event_risk_columns].drop_duplicates("event_uid"),
+            on="event_uid",
+            how="left",
+            suffixes=("", "_event"),
+        )
+        for column in event_risk_columns:
+            event_column = f"{column}_event"
+            if event_column in selected_matches.columns:
+                selected_matches[column] = (
+                    selected_matches[column].combine_first(selected_matches[event_column])
+                    if column in selected_matches.columns
+                    else selected_matches[event_column]
+                )
+                selected_matches = selected_matches.drop(columns=[event_column])
+
+    place_risk_table = summarize_place_risk_visits(
+        selected_matches,
+        name_col="hospital_label",
+        tag_col="client_tag",
+    ).head(10)
+    summary_pdf = summary_df.rename(columns={"總匹配院所次數": "匹配院所總次數"})
+
+    return build_personal_period_pdf_context(
+        employee_label=employee_label,
+        period_label=f"{start_date} ~ {end_date}",
+        selected_period=str(selected_period),
+        month_label="、".join(period_months),
+        summary_df=summary_pdf,
+        detail_df=detail_df,
+        monthly_trend=employee_monthly_trend,
+        month_order=personal_month_order,
+        monthly_claims=period_monthly_claims,
+        place_risk_table=place_risk_table,
+    )
+
+
 def build_monthly_claim_comparison(
     routes: pd.DataFrame,
     monthly_claims: pd.DataFrame | None,
@@ -4761,6 +5220,21 @@ with tab_period:
         st.warning("目前選擇條件沒有對應資料。")
     else:
         summary_row = summary_df.iloc[0]
+        period_month_text = "、".join(period_months)
+        personal_month_order: list[str] = []
+        employee_monthly_trend_for_pdf = pd.DataFrame()
+        st.markdown(
+            (
+                '<div class="print-only period-print-header">'
+                '<div class="period-print-title">個人期間報表</div>'
+                f'<div class="period-print-meta">姓名：{html_lib.escape(str(period_employee_label))}</div>'
+                f'<div class="period-print-meta">期間：{html_lib.escape(str(start_date))} ~ {html_lib.escape(str(end_date))}</div>'
+                f'<div class="period-print-meta">月份：{html_lib.escape(period_month_text)}</div>'
+                f'<div class="period-print-meta">篩選：{html_lib.escape(str(selected_period))}</div>'
+                "</div>"
+            ),
+            unsafe_allow_html=True,
+        )
         render_risk_focus_band(
             "覆核風險摘要",
             [
@@ -4791,6 +5265,8 @@ with tab_period:
         if employee_monthly_trend.empty:
             st.info("目前沒有足夠資料建立個人月趨勢。")
         else:
+            employee_monthly_trend, personal_month_order = add_month_axis_columns(employee_monthly_trend)
+            employee_monthly_trend_for_pdf = employee_monthly_trend
             latest_employee_month = employee_monthly_trend["year_month"].max()
             employee_warming = build_employee_monthly_warming(employee_monthly_trend, latest_month=latest_employee_month)
             if not employee_warming.empty:
@@ -4801,17 +5277,32 @@ with tab_period:
                         f"{float(warm_row['risk_priority_per_day']):.2f}，"
                         f"較前期平均增加 {float(warm_row['warming_delta']):.2f}。"
                     )
+            st.markdown('<div class="period-risk-trend-print"></div>', unsafe_allow_html=True)
             trend_col1, trend_col2 = st.columns([1.4, 1.0])
             with trend_col1:
                 fig_personal_trend = px.line(
                     employee_monthly_trend,
-                    x="year_month",
+                    x="month_index",
                     y="risk_priority_per_day",
                     markers=True,
                     labels={"year_month": "月份", "risk_priority_per_day": "每出勤日風險優先分"},
                 )
                 fig_personal_trend.update_traces(line=dict(width=3, color="#0f766e"))
-                fig_personal_trend.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=30))
+                fig_personal_trend.update_xaxes(
+                    title_text="月份",
+                    tickmode="array",
+                    tickvals=list(range(len(personal_month_order))),
+                    ticktext=personal_month_order,
+                    tickangle=-25,
+                    tickfont=dict(size=9),
+                    ticklabeloverflow="allow",
+                    range=[-0.5, max(len(personal_month_order) - 0.5, 0.5)],
+                )
+                fig_personal_trend.update_layout(
+                    title_text="個人風險月趨勢：每出勤日風險優先分",
+                    height=250,
+                    margin=dict(l=40, r=10, t=28, b=34),
+                )
                 st.plotly_chart(fig_personal_trend, width="stretch")
             with trend_col2:
                 monthly_event_view = employee_monthly_trend.rename(
@@ -4825,12 +5316,27 @@ with tab_period:
                 )
                 fig_personal_stack = px.bar(
                     monthly_event_view,
-                    x="月份",
+                    x="month_index",
                     y=["高風險點數", "需覆核點數", "僅居家附近天數"],
                     barmode="group",
                     labels={"value": "數量", "variable": "指標"},
                 )
-                fig_personal_stack.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=30))
+                fig_personal_stack.update_xaxes(
+                    title_text="月份",
+                    tickmode="array",
+                    tickvals=list(range(len(personal_month_order))),
+                    ticktext=personal_month_order,
+                    tickangle=-25,
+                    tickfont=dict(size=9),
+                    ticklabeloverflow="allow",
+                    range=[-0.5, max(len(personal_month_order) - 0.5, 0.5)],
+                )
+                fig_personal_stack.update_layout(
+                    title_text="個人風險月趨勢：風險指標數量",
+                    height=250,
+                    margin=dict(l=36, r=8, t=28, b=42),
+                    legend=dict(orientation="h", yanchor="top", y=-0.28, xanchor="left", x=0),
+                )
                 st.plotly_chart(fig_personal_stack, width="stretch")
 
         st.markdown("**出勤與里程摘要**")
@@ -4896,6 +5402,7 @@ with tab_period:
                 },
             )
 
+        st.markdown('<div class="print-only period-print-page-break"></div>', unsafe_allow_html=True)
         employee_matches = matches.loc[
             matches["attendance_uid"].isin(
                 attendance.loc[
@@ -4950,7 +5457,7 @@ with tab_period:
                 f"風險拜訪 {int(risk_place['風險拜訪次數'])} 次；"
                 f"主要問題：{risk_place['主要風險原因']}"
             )
-        render_print_table(place_risk_table)
+        render_print_table(place_risk_table, table_class="print-table--compact period-risk-focus-table")
         st.dataframe(
             place_risk_table,
             width="stretch",
@@ -5021,6 +5528,143 @@ with tab_period:
             },
         )
 
+        personal_pdf_key = f"{period_employee_id}_{start_date}_{end_date}_{selected_period}"
+        st.markdown("**PDF 匯出**")
+        personal_pdf_cols = st.columns([1, 1])
+        if personal_pdf_cols[0].button("產生個人期間報表 PDF", key="generate_personal_period_pdf", width="stretch"):
+            try:
+                with st.spinner("正在產生個人期間報表 PDF..."):
+                    personal_pdf_context = build_personal_period_pdf_context(
+                        employee_label=period_employee_label,
+                        period_label=f"{start_date} ~ {end_date}",
+                        selected_period=str(selected_period),
+                        month_label=period_month_text,
+                        summary_df=summary_show,
+                        detail_df=detail_df,
+                        monthly_trend=employee_monthly_trend_for_pdf,
+                        month_order=personal_month_order,
+                        monthly_claims=period_monthly_claims,
+                        place_risk_table=place_risk_table,
+                    )
+                    personal_pdf_bytes = build_personal_period_pdf_bytes(personal_pdf_context)
+                    config.reports_dir.mkdir(parents=True, exist_ok=True)
+                    (config.reports_dir / "personal_period_report.pdf").write_bytes(personal_pdf_bytes)
+                    st.session_state["personal_period_pdf_bytes"] = personal_pdf_bytes
+                    st.session_state["personal_period_pdf_key"] = personal_pdf_key
+                    st.session_state["personal_period_pdf_filename"] = (
+                        f"{period_employee_id}_{start_date}_to_{end_date}_personal_period.pdf"
+                    )
+                st.success("PDF 已產生，可下載。")
+            except Exception as exc:
+                st.error(f"PDF 產生失敗：{exc}")
+        if (
+            st.session_state.get("personal_period_pdf_bytes")
+            and st.session_state.get("personal_period_pdf_key") == personal_pdf_key
+        ):
+            personal_pdf_cols[1].download_button(
+                "下載個人期間報表 PDF",
+                data=st.session_state["personal_period_pdf_bytes"],
+                file_name=st.session_state.get("personal_period_pdf_filename", "personal_period_report.pdf"),
+                mime="application/pdf",
+                width="stretch",
+            )
+        else:
+            personal_pdf_cols[1].caption("產生後即可下載目前條件的 PDF。")
+
+        batch_pdf_key = f"all_{start_date}_{end_date}_{selected_period}"
+        st.markdown("**批次 PDF 匯出**")
+        batch_pdf_cols = st.columns([1, 1])
+        if batch_pdf_cols[0].button("產生全部業務個人期間報表 ZIP", key="generate_all_personal_period_pdf_zip", width="stretch"):
+            batch_inputs: list[PersonalPeriodBatchPdfInput] = []
+            batch_skipped: list[str] = []
+            progress = st.progress(0, text="準備批次個人期間報表資料...")
+            try:
+                with st.spinner("正在產生全部業務個人期間報表 PDF ZIP..."):
+                    employee_rows = employee_options[["employee_id", "employee_label"]].drop_duplicates("employee_id")
+                    total_employees = max(len(employee_rows), 1)
+                    for index, employee in enumerate(employee_rows.itertuples(index=False), start=1):
+                        employee_id = str(employee.employee_id)
+                        employee_label = str(employee.employee_label)
+                        progress.progress(
+                            min(index / total_employees, 1.0),
+                            text=f"準備 {employee_label} ({index}/{total_employees})",
+                        )
+                        try:
+                            context = build_personal_period_pdf_context_from_data(
+                                employee_id=employee_id,
+                                employee_label=employee_label,
+                                start_date=start_date,
+                                end_date=end_date,
+                                selected_period=str(selected_period),
+                                attendance=attendance,
+                                daily_metrics=daily_metrics,
+                                routes=routes,
+                                attendance_event_flags=attendance_event_flags,
+                                daily_risk=daily_risk,
+                                monthly_claim_comparison=monthly_claim_comparison,
+                                matches=matches,
+                                raw_events=raw_events,
+                            )
+                        except Exception as exc:
+                            batch_skipped.append(f"{employee_label}: {exc}")
+                            continue
+                        if context is None:
+                            batch_skipped.append(f"{employee_label}: selected period has no attendance data")
+                            continue
+                        filename = safe_report_filename(
+                            f"{employee_id}_{employee_label}_{start_date}_to_{end_date}_personal_period.pdf"
+                        )
+                        batch_inputs.append(
+                            PersonalPeriodBatchPdfInput(
+                                employee_id=employee_id,
+                                employee_label=employee_label,
+                                filename=filename,
+                                context=context,
+                            )
+                        )
+
+                    if not batch_inputs:
+                        st.warning("這個期間沒有可產生個人期間報表的業務資料。")
+                    else:
+                        progress.progress(1.0, text="正在轉出 PDF 並打包 ZIP...")
+                        batch_result = build_personal_period_batch_pdf_zip(batch_inputs)
+                        config.reports_dir.mkdir(parents=True, exist_ok=True)
+                        zip_filename = safe_report_filename(
+                            f"all_personal_period_{start_date}_to_{end_date}.zip"
+                        )
+                        (config.reports_dir / zip_filename).write_bytes(batch_result.zip_bytes)
+                        st.session_state["personal_period_batch_zip_bytes"] = batch_result.zip_bytes
+                        st.session_state["personal_period_batch_zip_key"] = batch_pdf_key
+                        st.session_state["personal_period_batch_zip_filename"] = zip_filename
+                        st.session_state["personal_period_batch_result_rows"] = batch_result.rows
+                        st.session_state["personal_period_batch_skipped"] = batch_skipped
+                        st.success(
+                            f"批次 ZIP 已產生：成功 {batch_result.success_count} 份，失敗 {batch_result.failure_count} 份，"
+                            f"略過 {len(batch_skipped)} 位。"
+                        )
+            except Exception as exc:
+                st.error(f"批次 PDF ZIP 產生失敗：{exc}")
+            finally:
+                progress.empty()
+
+        if (
+            st.session_state.get("personal_period_batch_zip_bytes")
+            and st.session_state.get("personal_period_batch_zip_key") == batch_pdf_key
+        ):
+            batch_pdf_cols[1].download_button(
+                "下載全部業務個人期間報表 ZIP",
+                data=st.session_state["personal_period_batch_zip_bytes"],
+                file_name=st.session_state.get("personal_period_batch_zip_filename", "all_personal_period_reports.zip"),
+                mime="application/zip",
+                width="stretch",
+            )
+            skipped = st.session_state.get("personal_period_batch_skipped") or []
+            if skipped:
+                with st.expander(f"查看略過清單（{len(skipped)}）"):
+                    st.write("\n".join(skipped))
+        else:
+            batch_pdf_cols[1].caption("產生 ZIP 後即可下載。")
+
         export_col1, export_col2 = st.columns(2)
         export_col1.download_button(
             "下載摘要 CSV",
@@ -5037,6 +5681,7 @@ with tab_period:
             width="stretch",
         )
 
+        st.markdown('<div class="print-only period-print-omit-rest"></div>', unsafe_allow_html=True)
         finance_detail = finance.loc[
             (finance["employee_id"] == period_employee_id)
             & finance["work_date"].dt.date.between(start_date, end_date)
@@ -5067,6 +5712,7 @@ with tab_period:
         )
         st.markdown("**期間財務明細**")
         st.caption("申請里程目前為整月匯入值；此表逐日顯示時會重複呈現同一月份申請總里程，不代表該日申請里程。")
+        st.markdown('<div class="print-only period-print-omit"></div>', unsafe_allow_html=True)
         render_print_table(
             finance_detail,
             [
@@ -5094,6 +5740,7 @@ with tab_period:
         )
 
 with tab_overview:
+    st.markdown('<div class="overview-print-section"></div>', unsafe_allow_html=True)
     st.subheader("全業務日期區間總覽")
     overview_col1, overview_col2 = st.columns([1.3, 1.3])
     all_dates = attendance["work_date"].dropna().sort_values()
@@ -5110,6 +5757,7 @@ with tab_overview:
         overview_start_date, overview_end_date = overview_range
     else:
         overview_start_date = overview_end_date = overview_start
+    overview_pdf_export_slot = st.container()
 
     overview_summary = build_overview_summary(
         attendance,
@@ -5188,14 +5836,22 @@ with tab_overview:
         ),
     )
 
+    overview_pdf_company_monthly = pd.DataFrame()
+    overview_pdf_month_order: list[str] = []
+
     st.markdown("**風險月趨勢**")
     monthly_risk_trend = build_monthly_risk_trend(daily_risk, monthly_claim_comparison)
     overview_end_month = pd.Timestamp(overview_end_date).strftime("%Y-%m")
+    monthly_risk_pdf_window = select_recent_month_window(monthly_risk_trend, overview_end_month, window=12)
+    if not monthly_risk_pdf_window.empty:
+        overview_pdf_company_monthly = build_company_monthly_risk_trend(monthly_risk_pdf_window)
+        overview_pdf_company_monthly, overview_pdf_month_order = add_month_axis_columns(overview_pdf_company_monthly)
     monthly_risk_window = select_recent_month_window(monthly_risk_trend, overview_end_month, window=6)
     if monthly_risk_window.empty:
         st.info("目前沒有足夠資料建立月風險趨勢。")
     else:
         company_monthly = build_company_monthly_risk_trend(monthly_risk_window)
+        company_monthly, overview_month_order = add_month_axis_columns(company_monthly)
         latest_month = company_monthly["year_month"].max()
         warming = build_employee_monthly_warming(monthly_risk_trend, latest_month=latest_month).head(5)
         if not warming.empty and float(warming.iloc[0].get("warming_delta", 0) or 0) > 0:
@@ -5211,10 +5867,11 @@ with tab_overview:
         monthly_metric_cols[2].metric("每出勤日風險優先分", f"{float(latest_company_month['risk_priority_per_day']):.2f}")
         monthly_metric_cols[3].metric("每員工風險優先分", f"{float(latest_company_month['risk_priority_per_employee']):.2f}")
 
-        trend_col1, trend_col2 = st.columns([1.35, 1.0])
+        trend_col1 = st.container()
+        trend_col2 = st.container()
         with trend_col1:
             company_line = company_monthly.melt(
-                id_vars=["year_month"],
+                id_vars=["year_month", "month_label", "month_index"],
                 value_vars=["risk_priority_per_day", "risky_employee_rate"],
                 var_name="指標",
                 value_name="數值",
@@ -5227,14 +5884,29 @@ with tab_overview:
             )
             fig_company_trend = px.line(
                 company_line,
-                x="year_month",
+                x="month_index",
                 y="數值",
                 color="指標",
                 markers=True,
                 labels={"year_month": "月份", "數值": "數值", "指標": "指標"},
             )
             fig_company_trend.update_traces(line=dict(width=3))
-            fig_company_trend.update_layout(height=340, margin=dict(l=10, r=10, t=10, b=30))
+            fig_company_trend.update_xaxes(
+                title_text="月份",
+                tickmode="array",
+                tickvals=list(range(len(overview_month_order))),
+                ticktext=overview_month_order,
+                tickangle=-25,
+                tickfont=dict(size=9),
+                ticklabeloverflow="allow",
+                range=[-0.5, max(len(overview_month_order) - 0.5, 0.5)],
+            )
+            apply_overview_chart_print_layout(
+                fig_company_trend,
+                "風險月趨勢：每出勤日風險優先分 / 需優先追查員工占比",
+                height=300,
+                margin=dict(l=44, r=72, t=34, b=48),
+            )
             st.plotly_chart(fig_company_trend, width="stretch")
         with trend_col2:
             employee_count_view = company_monthly.rename(
@@ -5245,16 +5917,32 @@ with tab_overview:
             )
             fig_employee_count = px.bar(
                 employee_count_view,
-                x="year_month",
+                x="month_index",
                 y=["納入員工數", "需優先追查員工數"],
                 barmode="group",
                 labels={"year_month": "月份", "value": "人數", "variable": "指標"},
             )
-            fig_employee_count.update_layout(height=340, margin=dict(l=10, r=10, t=10, b=30))
+            fig_employee_count.update_xaxes(
+                title_text="月份",
+                tickmode="array",
+                tickvals=list(range(len(overview_month_order))),
+                ticktext=overview_month_order,
+                tickangle=-25,
+                tickfont=dict(size=9),
+                ticklabeloverflow="allow",
+                range=[-0.5, max(len(overview_month_order) - 0.5, 0.5)],
+            )
+            apply_overview_chart_print_layout(
+                fig_employee_count,
+                "風險月趨勢：納入員工數 / 需優先追查員工數",
+                height=300,
+                margin=dict(l=44, r=72, t=34, b=48),
+            )
             st.plotly_chart(fig_employee_count, width="stretch")
 
-        st.markdown("**月風險類型分布**")
-        monthly_stack_col, monthly_table_col = st.columns([1.3, 1.0])
+        render_overview_chart_heading("月風險類型分布")
+        monthly_stack_col = st.container()
+        monthly_table_col = st.container()
         with monthly_stack_col:
             company_monthly_view = company_monthly.rename(
                 columns={
@@ -5266,12 +5954,27 @@ with tab_overview:
             )
             fig_company_stack = px.bar(
                 company_monthly_view,
-                x="月份",
+                x="month_index",
                 y=["高風險點數", "需覆核點數", "僅居家附近天數"],
                 barmode="group",
                 labels={"value": "數量", "variable": "指標"},
             )
-            fig_company_stack.update_layout(height=340, margin=dict(l=10, r=10, t=10, b=30))
+            fig_company_stack.update_xaxes(
+                title_text="月份",
+                tickmode="array",
+                tickvals=list(range(len(overview_month_order))),
+                ticktext=overview_month_order,
+                tickangle=-25,
+                tickfont=dict(size=9),
+                ticklabeloverflow="allow",
+                range=[-0.5, max(len(overview_month_order) - 0.5, 0.5)],
+            )
+            apply_overview_chart_print_layout(
+                fig_company_stack,
+                "月風險類型分布",
+                height=300,
+                margin=dict(l=44, r=72, t=34, b=48),
+            )
             st.plotly_chart(fig_company_stack, width="stretch")
         with monthly_table_col:
             monthly_table = company_monthly.rename(
@@ -5351,11 +6054,40 @@ with tab_overview:
             )
 
     st.markdown("**優先追查排行**")
+    high_risk_rank = (
+        overview_summary.sort_values(["高風險點數", "風險優先分"], ascending=[False, False])
+        if not overview_summary.empty
+        else overview_summary
+    )
+    review_rank = (
+        overview_summary.sort_values(["需覆核點數", "風險優先分"], ascending=[False, False])
+        if not overview_summary.empty
+        else overview_summary
+    )
+    home_rank = (
+        overview_summary.sort_values(["僅居家附近軌跡天數", "風險優先分"], ascending=[False, False])
+        if not overview_summary.empty
+        else overview_summary
+    )
+    claim_diff_rank = (
+        overview_claim_employee.sort_values("差異率絕對值", ascending=False)
+        if not overview_claim_employee.empty
+        else overview_claim_employee
+    )
+    render_print_ranking_grid(
+        [
+            ("高風險員工 Top 5", high_risk_rank, "employee_label", "高風險點數", "int"),
+            ("需覆核點數 Top 5", review_rank, "employee_label", "需覆核點數", "int"),
+            ("僅居家附近 Top 5", home_rank, "employee_label", "僅居家附近軌跡天數", "int"),
+            ("申報差異 Top 5", claim_diff_rank, "employee_label", "差異率絕對值", "percent"),
+        ]
+    )
+    st.markdown('<div class="overview-rank-interactive"></div>', unsafe_allow_html=True)
     rank_col1, rank_col2, rank_col3, rank_col4 = st.columns(4)
     with rank_col1:
         render_clickable_ranking_card(
             "高風險員工 Top 5",
-            overview_summary.sort_values(["高風險點數", "風險優先分"], ascending=[False, False]) if not overview_summary.empty else overview_summary,
+            high_risk_rank,
             "employee_label",
             "高風險點數",
             "high_risk",
@@ -5363,7 +6095,7 @@ with tab_overview:
     with rank_col2:
         render_clickable_ranking_card(
             "需覆核點數 Top 5",
-            overview_summary.sort_values(["需覆核點數", "風險優先分"], ascending=[False, False]) if not overview_summary.empty else overview_summary,
+            review_rank,
             "employee_label",
             "需覆核點數",
             "review_points",
@@ -5371,7 +6103,7 @@ with tab_overview:
     with rank_col3:
         render_clickable_ranking_card(
             "僅居家附近 Top 5",
-            overview_summary.sort_values(["僅居家附近軌跡天數", "風險優先分"], ascending=[False, False]) if not overview_summary.empty else overview_summary,
+            home_rank,
             "employee_label",
             "僅居家附近軌跡天數",
             "home_only",
@@ -5379,7 +6111,7 @@ with tab_overview:
     with rank_col4:
         render_clickable_ranking_card(
             "申報差異 Top 5",
-            overview_claim_employee.sort_values("差異率絕對值", ascending=False) if not overview_claim_employee.empty else overview_claim_employee,
+            claim_diff_rank,
             "employee_label",
             "差異率絕對值",
             "claim_diff",
@@ -5412,9 +6144,10 @@ with tab_overview:
     risk_top_row[2].metric("平均風險優先分", f"{overview_summary['平均風險優先分'].mean():.2f}" if not overview_summary.empty else "0.00")
     risk_top_row[3].metric("僅居家附近軌跡天數", int(overview_summary["僅居家附近軌跡天數"].fillna(0).sum()) if not overview_summary.empty else 0)
 
-    chart1, chart2 = st.columns(2)
+    chart1 = st.container()
+    chart2 = st.container()
     with chart1:
-        st.markdown("**各業務總計預估里程比較**")
+        render_overview_chart_heading("各業務總計預估里程比較")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
@@ -5427,10 +6160,17 @@ with tab_overview:
                 orientation="h",
                 labels={"employee_label": "員工", "總計預估里程": "總計預估里程(km)", "department": "部門"},
             )
-            fig_km.update_layout(height=460, margin=dict(l=120, r=10, t=10, b=30))
+            apply_overview_chart_print_layout(
+                fig_km,
+                "各業務總計預估里程比較",
+                height=360,
+                margin=dict(l=132, r=160, t=36, b=42),
+            )
+            km_max = pd.to_numeric(overview_summary["總計預估里程"], errors="coerce").fillna(0).max()
+            fig_km.update_xaxes(range=[0, max(float(km_max) * 1.12, 1.0)], automargin=True)
             st.plotly_chart(fig_km, width="stretch")
     with chart2:
-        st.markdown("**風險率 vs 異常率**")
+        render_overview_chart_heading("風險率 vs 異常率")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
@@ -5446,12 +6186,22 @@ with tab_overview:
                 labels={"異常率": "異常率", "平均風險率": "平均風險率", "department": "部門"},
                 hover_data={"需覆核點數": True, "需覆核點數標記": False},
             )
-            fig_scatter.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10))
+            apply_overview_chart_print_layout(
+                fig_scatter,
+                "風險率 vs 異常率",
+                height=340,
+                margin=dict(l=56, r=160, t=36, b=46),
+            )
+            scatter_x_max = pd.to_numeric(scatter_overview["異常率"], errors="coerce").fillna(0).max()
+            scatter_y_max = pd.to_numeric(scatter_overview["平均風險率"], errors="coerce").fillna(0).max()
+            fig_scatter.update_xaxes(range=[0, max(float(scatter_x_max) * 1.15, 1.0)], automargin=True)
+            fig_scatter.update_yaxes(range=[0, max(float(scatter_y_max) * 1.15, 1.0)], automargin=True)
             st.plotly_chart(fig_scatter, width="stretch")
 
-    chart3, chart4 = st.columns(2)
+    chart3 = st.container()
+    chart4 = st.container()
     with chart3:
-        st.markdown("**出勤時數與 GPS 點數比較**")
+        render_overview_chart_heading("出勤時數與 GPS 點數比較")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
@@ -5463,26 +6213,53 @@ with tab_overview:
                 orientation="h",
                 labels={"employee_label": "員工", "value": "數值", "variable": "指標"},
             )
-            fig_hours.update_layout(height=460, margin=dict(l=120, r=10, t=10, b=30))
+            apply_overview_chart_print_layout(
+                fig_hours,
+                "出勤時數與 GPS 點數比較",
+                height=360,
+                margin=dict(l=132, r=160, t=36, b=42),
+            )
+            hours_max = pd.to_numeric(
+                overview_summary[["總出勤時數", "總GPS點數"]].stack(),
+                errors="coerce",
+            ).fillna(0).max()
+            fig_hours.update_xaxes(range=[0, max(float(hours_max) * 1.12, 1.0)], automargin=True)
             st.plotly_chart(fig_hours, width="stretch")
     with chart4:
-        st.markdown("**財務補貼總覽**")
+        render_overview_chart_heading("財務補貼總覽")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
+            subsidy_chart_data = overview_summary.sort_values("油資補貼", ascending=False)
+            subsidy_employee_order = subsidy_chart_data["employee_label"].dropna().drop_duplicates().tolist()
             fig_subsidy = px.bar(
-                overview_summary.sort_values("油資補貼", ascending=False),
+                subsidy_chart_data,
                 x="employee_label",
                 y=["油資補貼", "維修補貼", "日當費"],
                 barmode="stack",
                 labels={"employee_label": "員工", "value": "金額", "variable": "補貼項目"},
             )
-            fig_subsidy.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35)
+            apply_overview_chart_print_layout(
+                fig_subsidy,
+                "財務補貼總覽",
+                height=340,
+                margin=dict(l=56, r=160, t=36, b=64),
+            )
+            fig_subsidy.update_layout(xaxis_tickangle=-30)
+            fig_subsidy.update_xaxes(
+                type="category",
+                categoryorder="array",
+                categoryarray=subsidy_employee_order,
+                range=[-0.5, max(len(subsidy_employee_order) - 0.05, 0.5)],
+                automargin=True,
+                tickfont=dict(size=8),
+            )
             st.plotly_chart(fig_subsidy, width="stretch")
 
-    risk_chart1, risk_chart2 = st.columns(2)
+    risk_chart1 = st.container()
+    risk_chart2 = st.container()
     with risk_chart1:
-        st.markdown("**員工風險排名**")
+        render_overview_chart_heading("員工風險排名")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
@@ -5494,10 +6271,20 @@ with tab_overview:
                 orientation="h",
                 labels={"employee_label": "員工", "value": "數量", "variable": "指標"},
             )
-            fig_risk_rank.update_layout(height=460, margin=dict(l=120, r=10, t=10, b=30))
+            apply_overview_chart_print_layout(
+                fig_risk_rank,
+                "員工風險排名",
+                height=360,
+                margin=dict(l=132, r=160, t=36, b=42),
+            )
+            risk_rank_max = pd.to_numeric(
+                overview_summary[["需覆核點數", "高風險點數", "低信心點數", "僅居家附近軌跡天數"]].stack(),
+                errors="coerce",
+            ).fillna(0).max()
+            fig_risk_rank.update_xaxes(range=[0, max(float(risk_rank_max) * 1.12, 1.0)], automargin=True)
             st.plotly_chart(fig_risk_rank, width="stretch")
     with risk_chart2:
-        st.markdown("**風險優先分排名**")
+        render_overview_chart_heading("風險優先分排名")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
@@ -5510,12 +6297,20 @@ with tab_overview:
                 labels={"employee_label": "員工", "風險優先分": "風險優先分", "department": "部門"},
                 hover_data={"需覆核點數": True, "高風險點數": True, "低信心點數": True, "風險分數": True, "平均風險優先分": ":.2f"},
             )
-            fig_risk_score.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10))
+            apply_overview_chart_print_layout(
+                fig_risk_score,
+                "風險優先分排名",
+                height=340,
+                margin=dict(l=132, r=160, t=36, b=42),
+            )
+            risk_score_max = pd.to_numeric(overview_summary["風險優先分"], errors="coerce").fillna(0).max()
+            fig_risk_score.update_xaxes(range=[0, max(float(risk_score_max) * 1.12, 1.0)], automargin=True)
             st.plotly_chart(fig_risk_score, width="stretch")
 
-    claim_chart1, claim_chart2 = st.columns(2)
+    claim_chart1 = st.container()
+    claim_chart2 = st.container()
     with claim_chart1:
-        st.markdown("**員工月申請里程 vs 系統預估公務里程**")
+        render_overview_chart_heading("員工月申請里程 vs 系統預估公務里程")
         if overview_claim_employee.empty:
             st.info("所選月份目前沒有可比較的月申請里程資料。")
         else:
@@ -5535,10 +6330,17 @@ with tab_overview:
                 hover_data=["department"],
                 labels={"employee_label": "員工", "公里數": "公里數", "department": "部門"},
             )
-            fig_claim_bar.update_layout(height=460, margin=dict(l=120, r=10, t=10, b=30))
+            apply_overview_chart_print_layout(
+                fig_claim_bar,
+                "員工月申請里程 vs 系統預估公務里程",
+                height=360,
+                margin=dict(l=132, r=160, t=36, b=42),
+            )
+            claim_bar_max = pd.to_numeric(claim_bar_df["公里數"], errors="coerce").fillna(0).max()
+            fig_claim_bar.update_xaxes(range=[0, max(float(claim_bar_max) * 1.12, 1.0)], automargin=True)
             st.plotly_chart(fig_claim_bar, width="stretch")
     with claim_chart2:
-        st.markdown("**差異率排名**")
+        render_overview_chart_heading("差異率排名")
         if overview_claim_employee.empty:
             st.info("所選月份目前沒有可比較的月申請里程資料。")
         else:
@@ -5558,10 +6360,24 @@ with tab_overview:
                     "差異率絕對值": False,
                 },
             )
-            fig_claim_rank.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10))
+            apply_overview_chart_print_layout(
+                fig_claim_rank,
+                "差異率排名",
+                height=340,
+                margin=dict(l=132, r=160, t=36, b=42),
+            )
+            claim_rank_values = pd.to_numeric(ranking_df["差異率顯示"], errors="coerce").dropna()
+            if not claim_rank_values.empty:
+                claim_rank_min = float(claim_rank_values.min())
+                claim_rank_max = float(claim_rank_values.max())
+                claim_rank_span = max(claim_rank_max - claim_rank_min, 1.0)
+                fig_claim_rank.update_xaxes(
+                    range=[claim_rank_min - claim_rank_span * 0.08, claim_rank_max + claim_rank_span * 0.12],
+                    automargin=True,
+                )
             st.plotly_chart(fig_claim_rank, width="stretch")
 
-    st.markdown("**月申請里程散點圖**")
+    render_overview_chart_heading("月申請里程散點圖")
     if overview_claim_employee.empty:
         st.info("所選月份目前沒有可比較的月申請里程資料。")
     else:
@@ -5612,7 +6428,15 @@ with tab_overview:
             y1=max_axis_value,
             line=dict(color="#64748b", width=2),
         )
-        fig_claim_scatter.update_layout(height=460, margin=dict(l=10, r=10, t=10, b=10))
+        apply_overview_chart_print_layout(
+            fig_claim_scatter,
+            "月申請里程散點圖",
+            height=360,
+            margin=dict(l=56, r=160, t=36, b=50),
+        )
+        claim_scatter_limit = max(max_axis_value * 1.12, 1.0)
+        fig_claim_scatter.update_xaxes(range=[0, claim_scatter_limit], automargin=True)
+        fig_claim_scatter.update_yaxes(range=[0, claim_scatter_limit], automargin=True)
         st.plotly_chart(fig_claim_scatter, width="stretch")
         if overview_is_full_single_month:
             st.caption(
@@ -5621,6 +6445,46 @@ with tab_overview:
             )
         else:
             st.caption("燈號僅在選擇完整單月時套用；目前日期區間不是完整單月，散點圖以灰色呈現且不做燈號判定。")
+
+    overview_pdf_key = f"{overview_start_date}_{overview_end_date}"
+    with overview_pdf_export_slot:
+        st.markdown("**PDF 匯出**")
+        pdf_cols = st.columns([1, 1])
+        if pdf_cols[0].button("產生全業務總覽 PDF", key="generate_overview_pdf", width="stretch"):
+            try:
+                with st.spinner("正在產生全業務總覽 PDF..."):
+                    overview_pdf_context = build_overview_pdf_context(
+                        overview_summary=overview_summary,
+                        overview_claim_employee=overview_claim_employee,
+                        company_monthly=overview_pdf_company_monthly,
+                        month_order=overview_pdf_month_order,
+                        start_date=overview_start_date,
+                        end_date=overview_end_date,
+                    )
+                    overview_pdf_bytes = build_overview_pdf_bytes(overview_pdf_context)
+                    config.reports_dir.mkdir(parents=True, exist_ok=True)
+                    (config.reports_dir / "overview_report.pdf").write_bytes(overview_pdf_bytes)
+                    st.session_state["overview_pdf_bytes"] = overview_pdf_bytes
+                    st.session_state["overview_pdf_key"] = overview_pdf_key
+                    st.session_state["overview_pdf_filename"] = (
+                        f"all_employee_overview_{overview_start_date}_to_{overview_end_date}.pdf"
+                    )
+                st.success("PDF 已產生，可下載。")
+            except Exception as exc:
+                st.error(f"PDF 產生失敗：{exc}")
+        if (
+            st.session_state.get("overview_pdf_bytes")
+            and st.session_state.get("overview_pdf_key") == overview_pdf_key
+        ):
+            pdf_cols[1].download_button(
+                "下載全業務總覽 PDF",
+                data=st.session_state["overview_pdf_bytes"],
+                file_name=st.session_state.get("overview_pdf_filename", "all_employee_overview.pdf"),
+                mime="application/pdf",
+                width="stretch",
+            )
+        else:
+            pdf_cols[1].caption("產生後即可下載目前日期區間的 PDF。")
 
     st.markdown("**全業務明細表**")
     overview_summary_view = overview_summary.rename(

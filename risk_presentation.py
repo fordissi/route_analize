@@ -4,6 +4,8 @@ from typing import Any
 
 import pandas as pd
 
+from distance_formatting import format_distance
+
 
 RISK_REASON_LABELS = {
     "near_home_checkin": "可能在家附近打卡",
@@ -73,6 +75,9 @@ def build_monthly_risk_trend(daily_risk: pd.DataFrame, monthly_claims: pd.DataFr
         "high_risk_event_count",
         "low_confidence_event_count",
         "home_area_only_days",
+        "insufficient_checkin_days",
+        "short_attendance_span_days",
+        "long_attendance_span_days",
         "gps_event_count",
         "claim_diff_abs_rate",
     ]
@@ -96,6 +101,9 @@ def build_monthly_risk_trend(daily_risk: pd.DataFrame, monthly_claims: pd.DataFr
         "high_risk_event_count",
         "low_confidence_event_count",
         "home_area_only_trace",
+        "insufficient_checkin_count",
+        "short_attendance_span",
+        "long_attendance_span",
         "gps_event_count",
     ]
     for column in numeric_columns:
@@ -112,6 +120,9 @@ def build_monthly_risk_trend(daily_risk: pd.DataFrame, monthly_claims: pd.DataFr
             high_risk_event_count=("high_risk_event_count", "sum"),
             low_confidence_event_count=("low_confidence_event_count", "sum"),
             home_area_only_days=("home_area_only_trace", lambda s: int((s.fillna(0) > 0).sum())),
+            insufficient_checkin_days=("insufficient_checkin_count", lambda s: int((s.fillna(0) > 0).sum())),
+            short_attendance_span_days=("short_attendance_span", lambda s: int((s.fillna(0) > 0).sum())),
+            long_attendance_span_days=("long_attendance_span", lambda s: int((s.fillna(0) > 0).sum())),
             gps_event_count=("gps_event_count", "sum"),
         )
     )
@@ -203,6 +214,9 @@ def build_company_monthly_risk_trend(monthly_trend: pd.DataFrame) -> pd.DataFram
         "high_risk_event_count",
         "low_confidence_event_count",
         "home_area_only_days",
+        "insufficient_checkin_days",
+        "short_attendance_span_days",
+        "long_attendance_span_days",
         "risky_employee_count",
         "risky_employee_rate",
         "claim_diff_abs_rate",
@@ -221,6 +235,9 @@ def build_company_monthly_risk_trend(monthly_trend: pd.DataFrame) -> pd.DataFram
         "high_risk_event_count",
         "low_confidence_event_count",
         "home_area_only_days",
+        "insufficient_checkin_days",
+        "short_attendance_span_days",
+        "long_attendance_span_days",
         "claim_diff_abs_rate",
     ]
     for column in numeric_columns:
@@ -231,6 +248,8 @@ def build_company_monthly_risk_trend(monthly_trend: pd.DataFrame) -> pd.DataFram
     work["is_priority_review_employee"] = (
         (work["high_risk_event_count"] > 0)
         | (work["home_area_only_days"] > 0)
+        | (work["insufficient_checkin_days"] > 0)
+        | (work["short_attendance_span_days"] > 0)
         | (work["risk_priority_per_day"] >= 12)
     )
 
@@ -244,6 +263,9 @@ def build_company_monthly_risk_trend(monthly_trend: pd.DataFrame) -> pd.DataFram
             high_risk_event_count=("high_risk_event_count", "sum"),
             low_confidence_event_count=("low_confidence_event_count", "sum"),
             home_area_only_days=("home_area_only_days", "sum"),
+            insufficient_checkin_days=("insufficient_checkin_days", "sum"),
+            short_attendance_span_days=("short_attendance_span_days", "sum"),
+            long_attendance_span_days=("long_attendance_span_days", "sum"),
             risky_employee_count=("is_priority_review_employee", "sum"),
             claim_diff_abs_rate=("claim_diff_abs_rate", "mean"),
         )
@@ -390,7 +412,7 @@ def event_risk_focus(row: pd.Series) -> str:
     if location_class == "existing_client_visit":
         return "既有客戶拜訪"
     if location_class == "unknown_field":
-        return "未知外勤點判定"
+        return "未知出勤點判定"
     selected_distance = _num(row.get("selected_distance_m"), default=float("nan"))
     distance_gap = _num(row.get("distance_gap_m"), default=0)
     rank = _num(row.get("selected_rank"), default=0)
@@ -413,15 +435,18 @@ def event_risk_focus(row: pd.Series) -> str:
 
 def event_evidence_summary(row: pd.Series) -> str:
     parts: list[str] = []
+    distance_from_home = _num(row.get("distance_from_home_m"), default=float("nan"))
     home_bucket = _text(row.get("home_distance_bucket")).strip()
-    if home_bucket:
+    if pd.notna(distance_from_home):
+        parts.append(f"距離住家：{format_distance(distance_from_home)}")
+    elif home_bucket:
         parts.append(f"距離住家：{home_bucket}")
     selected_visit_name = _text(row.get("selected_visit_name")).strip()
     selected_visit_type = _text(row.get("selected_visit_type")).strip()
     selected_visit_distance = _num(row.get("selected_visit_distance_m"), default=float("nan"))
     if selected_visit_name:
-        distance_text = f" {selected_visit_distance:.0f}m" if pd.notna(selected_visit_distance) else ""
-        parts.append(f"v3系統判定：{selected_visit_name}{distance_text} ({selected_visit_type})")
+        distance_text = f" {format_distance(selected_visit_distance)}" if pd.notna(selected_visit_distance) else ""
+        parts.append(f"系統判定：{selected_visit_name}{distance_text} ({selected_visit_type})")
     existing_top3 = _text(row.get("existing_client_candidates_top3")).strip()
     if existing_top3:
         parts.append(f"既有客戶候選Top3：{existing_top3}")
@@ -431,26 +456,23 @@ def event_evidence_summary(row: pd.Series) -> str:
     nearest_existing = _text(row.get("nearest_existing_client_name")).strip()
     nearest_existing_distance = _num(row.get("nearest_existing_client_distance_m"), default=float("nan"))
     if nearest_existing:
-        distance_text = f" {nearest_existing_distance:.0f}m" if pd.notna(nearest_existing_distance) else ""
+        distance_text = f" {format_distance(nearest_existing_distance)}" if pd.notna(nearest_existing_distance) else ""
         parts.append(f"最近既有客戶：{nearest_existing}{distance_text}")
     nearest_hospital = _text(row.get("nearest_hospital_name")).strip()
     nearest_hospital_distance = _num(row.get("nearest_hospital_distance_m"), default=float("nan"))
     if nearest_hospital:
-        distance_text = f" {nearest_hospital_distance:.0f}m" if pd.notna(nearest_hospital_distance) else ""
+        distance_text = f" {format_distance(nearest_hospital_distance)}" if pd.notna(nearest_hospital_distance) else ""
         parts.append(f"最近醫院：{nearest_hospital}{distance_text}")
-    distance_from_home = _num(row.get("distance_from_home_m"), default=float("nan"))
     selected_distance = _num(row.get("selected_distance_m"), default=float("nan"))
     nearest_distance = _num(row.get("nearest_distance_m"), default=float("nan"))
     distance_gap = _num(row.get("distance_gap_m"), default=float("nan"))
     rank = _num(row.get("selected_rank"), default=float("nan"))
-    if pd.notna(distance_from_home):
-        parts.append(f"距住家 {distance_from_home:.0f}m")
     if pd.notna(selected_distance):
-        parts.append(f"選定距離 {selected_distance:.0f}m")
+        parts.append(f"選定距離 {format_distance(selected_distance)}")
     if pd.notna(nearest_distance):
-        parts.append(f"最近候選 {nearest_distance:.0f}m")
+        parts.append(f"最近候選 {format_distance(nearest_distance)}")
     if pd.notna(distance_gap):
-        parts.append(f"距離差 {distance_gap:.0f}m")
+        parts.append(f"距離差 {format_distance(distance_gap)}")
     if pd.notna(rank) and rank > 0:
         parts.append(f"排名 {rank:.0f}")
     reason = _text(row.get("risk_reason_text")).strip()

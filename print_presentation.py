@@ -7,6 +7,11 @@ import pandas as pd
 
 
 def _cell_text(value: Any) -> str:
+    if isinstance(value, pd.Series):
+        non_empty = value.dropna()
+        if non_empty.empty:
+            return ""
+        value = non_empty.iloc[0]
     if pd.isna(value):
         return ""
     return str(value)

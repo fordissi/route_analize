@@ -59,3 +59,11 @@ def test_build_print_table_html_limits_wide_detail_tables_for_print_pages():
     assert "period-detail-table" in html
     assert "17-0" not in html
     assert "16" in html
+
+
+def test_build_print_table_html_handles_duplicate_column_labels():
+    dataframe = pd.DataFrame([["判定來源", "候選來源"]], columns=["最近醫院", "最近醫院"])
+
+    html = build_print_table_html(dataframe, columns=["最近醫院"])
+
+    assert "判定來源" in html

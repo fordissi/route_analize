@@ -5,6 +5,7 @@ from typing import Any
 
 import pandas as pd
 
+from distance_formatting import format_distance
 from matcher import haversine_meter
 
 
@@ -59,7 +60,7 @@ DAILY_PRIORITY_CAPS = {
 HOME_CORE_LABEL = "極近居家點"
 HOME_EDGE_LABEL = "邊緣居家點"
 EXISTING_CLIENT_LABEL = "既有客戶拜訪點"
-UNKNOWN_FIELD_LABEL = "未知外勤點"
+UNKNOWN_FIELD_LABEL = "未知出勤點"
 
 NORMAL_LABEL = "正常"
 LOW_CONFIDENCE_LABEL = "低信心"
@@ -773,8 +774,6 @@ class RiskService:
         prospects = candidates
         if "is_existing_client" in prospects.columns:
             prospects = prospects.loc[~self._as_bool_series(prospects["is_existing_client"])]
-        if "is_hospital_facility" in prospects.columns:
-            prospects = prospects.loc[self._as_bool_series(prospects["is_hospital_facility"])]
         prospects = prospects.loc[
             prospects["beeline_meter"] <= float(getattr(self.config, "v3_unknown_prospect_radius_m", 500.0))
         ]
@@ -801,7 +800,7 @@ class RiskService:
             if pd.isna(distance):
                 parts.append(name)
             else:
-                parts.append(f"{name} {float(distance):.0f}m")
+                parts.append(f"{name} {format_distance(distance)}")
         return "；".join(parts)
 
     @staticmethod
@@ -814,7 +813,7 @@ class RiskService:
             return "101~500公尺內"
         if distance_from_home <= 1000:
             return "501~1000公尺內"
-        return f"{distance_from_home:.0f}m"
+        return format_distance(distance_from_home)
 
     def _risk_level(self, score: int, confidence_score: int, reason_codes: list[str]) -> str:
         reasons = set(reason_codes)
@@ -881,7 +880,7 @@ class RiskService:
         if "no_reasonable_candidate" in reason_codes:
             translated.append("GPS 點附近沒有合理候選院所")
         if "unknown_field" in reason_codes:
-            translated.append("1000m 內沒有既有客戶，判定為未知外勤點，需主管依日報或備註覆核")
+            translated.append("1000公尺內沒有既有客戶，判定為未知出勤點，需主管依日報或備註覆核")
         if "impossible_travel_time" in reason_codes:
             translated.append("相鄰打卡點移動時間不合理")
         return "；".join(translated)
@@ -997,4 +996,4 @@ class RiskService:
     def _format_distance(value: float | None) -> str:
         if value is None:
             return "未知距離"
-        return f"{value:.0f}m"
+        return format_distance(value)

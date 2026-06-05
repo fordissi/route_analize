@@ -16,6 +16,7 @@ import streamlit as st
 from pathlib import Path
 
 from dataframe_utils import ensure_columns, rename_columns_for_unique_selection
+from distance_formatting import format_distance
 from pipeline import run_pipeline
 from settings import build_config, config_to_editable_dict, save_user_settings
 from google_routes_service import (
@@ -1294,6 +1295,14 @@ def render_print_table(
     st.markdown(html, unsafe_allow_html=True)
 
 
+def apply_distance_display(dataframe: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    result = dataframe.copy()
+    for column in columns:
+        if column in result.columns:
+            result[column] = result[column].apply(lambda value: "" if pd.isna(value) else format_distance(value))
+    return result
+
+
 def compute_zoom(latitudes: list[float], longitudes: list[float]) -> float:
     if not latitudes or not longitudes:
         return 6.0
@@ -1563,7 +1572,8 @@ def render_overview_drilldown_detail(
     employee_label = selection.get("employee_label", "未標示")
     selection_type = selection.get("type", "")
     type_labels = {
-        "high_risk": "高風險員工",
+        "priority_risk": "風險優先分",
+        "high_risk": "高風險打卡點",
         "review_points": "需覆核點數",
         "home_only": "僅居家附近",
         "claim_diff": "申報差異",
@@ -1581,7 +1591,9 @@ def render_overview_drilldown_detail(
             & risk_days["work_date"].dt.date.between(start_date, end_date)
         ].copy()
         risk_days = add_daily_risk_drilldown_columns(risk_days)
-        if selection_type == "high_risk":
+        if selection_type == "priority_risk":
+            risk_days = risk_days.loc[pd.to_numeric(risk_days.get("risk_priority_score", 0), errors="coerce").fillna(0) > 0]
+        elif selection_type == "high_risk":
             risk_days = risk_days.loc[
                 (pd.to_numeric(risk_days.get("high_risk_event_count", 0), errors="coerce").fillna(0) > 0)
                 | (pd.to_numeric(risk_days.get("risk_priority_score", 0), errors="coerce").fillna(0) >= 20)
@@ -1608,7 +1620,7 @@ def render_overview_drilldown_detail(
                     "home_start_end_without_field_trace": "住家起訖缺外勤",
                     "insufficient_route_evidence": "路線佐證不足",
                     "home_near_event_count": "住家附近打卡點數",
-                    "max_distance_from_home_m": "離家最遠距離(m)",
+                    "max_distance_from_home_m": "離家最遠距離",
                     "field_visit_count": "外勤佐證數",
                     "primary_risk_reason": "主要風險原因",
                     "risk_drilldown_hint": "追查提示",
@@ -1627,11 +1639,12 @@ def render_overview_drilldown_detail(
                 "住家起訖缺外勤",
                 "路線佐證不足",
                 "住家附近打卡點數",
-                "離家最遠距離(m)",
+                "離家最遠距離",
                 "外勤佐證數",
                 "主要風險原因",
                 "追查提示",
             ]
+            day_view = apply_distance_display(day_view, ["離家最遠距離"])
             st.dataframe(
                 day_view[[column for column in day_columns if column in day_view.columns]],
                 width="stretch",
@@ -1644,7 +1657,7 @@ def render_overview_drilldown_detail(
                     "原始風險分數": st.column_config.NumberColumn(format="%.0f"),
                     "主要風險原因": st.column_config.TextColumn(width="medium"),
                     "追查提示": st.column_config.TextColumn(width="medium"),
-                    "離家最遠距離(m)": st.column_config.NumberColumn(format="%.0f m"),
+                    "離家最遠距離": st.column_config.TextColumn(width="small"),
                 },
             )
             detail_rows = []
@@ -1667,7 +1680,19 @@ def render_overview_drilldown_detail(
             (event_view["employee_id"].astype(str) == employee_id)
             & event_view["work_date"].dt.date.between(start_date, end_date)
         ].copy()
-        if selection_type == "high_risk":
+        if selection_type == "priority_risk":
+            if not risk_days.empty and "attendance_uid" in risk_days.columns:
+                event_view = event_view.loc[
+                    event_view["attendance_uid"].isin(risk_days["attendance_uid"])
+                    & (
+                        event_view["risk_level"].isin([HIGH_RISK_LABEL, REVIEW_LABEL])
+                        | (pd.to_numeric(event_view.get("risk_score", 0), errors="coerce").fillna(0) > 0)
+                        | (pd.to_numeric(event_view.get("review_score", 0), errors="coerce").fillna(0) > 0)
+                    )
+                ]
+            else:
+                event_view = event_view.iloc[0:0]
+        elif selection_type == "high_risk":
             event_view = event_view.loc[event_view["risk_level"].eq(HIGH_RISK_LABEL)]
         elif selection_type == "review_points":
             event_view = event_view.loc[event_view["risk_level"].isin([HIGH_RISK_LABEL, REVIEW_LABEL])]
@@ -1687,33 +1712,34 @@ def render_overview_drilldown_detail(
                 columns={
                     "work_date": "日期",
                     "actual_time_display": "時間",
-                    "selected_visit_name": "v3系統判定",
-                    "selected_visit_type": "v3判定類型",
+                    "selected_visit_name": "系統判定",
+                    "selected_visit_type": "判定類型",
                     "risk_level": "覆核狀態",
                     "risk_score": "原始風險分數",
                     "event_risk_focus": "追查重點",
                     "event_evidence_summary": "證據摘要",
                     "risk_reason_text": "覆核原因",
-                    "selected_visit_distance_m": "v3判定距離(m)",
-                    "selected_distance_m": "候選距離參考(m)",
-                    "nearest_distance_m": "最近候選距離(m)",
-                    "distance_gap_m": "距離差(m)",
+                    "selected_visit_distance_m": "判定距離",
+                    "selected_distance_m": "候選距離參考",
+                    "nearest_distance_m": "最近候選距離",
+                    "distance_gap_m": "距離差",
                     "selected_rank": "候選排名",
                 }
             )
             event_columns = [
                 "日期",
                 "時間",
-                "v3系統判定",
-                "v3判定類型",
+                "系統判定",
+                "判定類型",
                 "覆核狀態",
                 "原始風險分數",
                 "追查重點",
-                "v3判定距離(m)",
-                "最近候選距離(m)",
-                "距離差(m)",
+                "判定距離",
+                "最近候選距離",
+                "距離差",
                 "候選排名",
             ]
+            event_table = apply_distance_display(event_table, ["判定距離", "候選距離參考", "最近候選距離", "距離差"])
             st.dataframe(
                 event_table[[column for column in event_columns if column in event_table.columns]],
                 width="stretch",
@@ -1722,21 +1748,21 @@ def render_overview_drilldown_detail(
                 column_config={
                     "日期": st.column_config.DateColumn(width="small"),
                     "時間": st.column_config.TextColumn(width="medium"),
-                    "v3系統判定": st.column_config.TextColumn(width="large"),
-                    "v3判定類型": st.column_config.TextColumn(width="small"),
+                    "系統判定": st.column_config.TextColumn(width="large"),
+                    "判定類型": st.column_config.TextColumn(width="small"),
                     "覆核狀態": st.column_config.TextColumn(width="small"),
                     "原始風險分數": st.column_config.NumberColumn(format="%.0f"),
                     "追查重點": st.column_config.TextColumn(width="medium"),
-                    "v3判定距離(m)": st.column_config.NumberColumn(format="%.0f m"),
-                    "最近候選距離(m)": st.column_config.NumberColumn(format="%.0f m"),
-                    "距離差(m)": st.column_config.NumberColumn(format="%.0f m"),
+                    "判定距離": st.column_config.TextColumn(width="small"),
+                    "最近候選距離": st.column_config.TextColumn(width="small"),
+                    "距離差": st.column_config.TextColumn(width="small"),
                 },
             )
             event_detail_rows = []
             for _, row in event_table.head(30).iterrows():
                 date_text = pd.to_datetime(row.get("日期"), errors="coerce")
                 date_label = date_text.date().isoformat() if pd.notna(date_text) else str(row.get("日期") or "未標示日期")
-                title = f"{date_label} {row.get('時間', '')} / {row.get('v3系統判定', '未標示判定')}"
+                title = f"{date_label} {row.get('時間', '')} / {row.get('系統判定', '未標示判定')}"
                 body_parts = [
                     f"證據摘要：{row.get('證據摘要')}" if str(row.get("證據摘要") or "").strip() else "",
                     f"覆核原因：{translate_risk_reason_codes(row.get('覆核原因'))}"
@@ -2942,7 +2968,7 @@ def build_daily_map(
                 "\u9806\u5e8f\uff1a%{customdata[4]}<br>"
                 "\u6642\u9593\uff1a%{customdata[1]}<br>"
                 "\u5ea7\u6a19\uff1a%{lat:.6f}, %{lon:.6f}<br>"
-                "v3判定：%{customdata[2]}<br>"
+                "系統判定：%{customdata[2]}<br>"
                 "類型：%{customdata[3]}<extra></extra>"
             ),
             customdata=[
@@ -2977,11 +3003,11 @@ def build_daily_map(
                 ),
                 hovertemplate=(
                     "<b>%{customdata[0]}</b><br>"
-                    "v3既有客戶：%{customdata[1]}<br>"
+                    "既有客戶：%{customdata[1]}<br>"
                     "時間：%{customdata[2]}<extra></extra>"
                 ),
                 customdata=selected_stops[["selected_visit_type", "selected_visit_name", "actual_time_display"]].fillna("未判定"),
-                name="v3既有客戶拜訪",
+                name="既有客戶拜訪",
             )
         )
 
@@ -3241,17 +3267,17 @@ def render_weekly_summary_cards(cards: list[dict[str, object]]) -> None:
                 )
             selected_html = "".join(selected_rows)
         else:
-            selected_html = "<li>本日無 v3 既有客戶拜訪</li>"
+            selected_html = "<li>本日無既有客戶拜訪</li>"
 
         nearest_client = card["nearest_client"]
         nearest_client_text = (
-            f"{nearest_client['name']} 距 {nearest_client['meter']:.0f} m"
+            f"{nearest_client['name']} 距 {format_distance(nearest_client['meter'])}"
             if nearest_client
             else "本日無最近既有客戶"
         )
         nearest_hospital = card["nearest_hospital"]
         nearest_hospital_text = (
-            f"{nearest_hospital['name']} 距 {nearest_hospital['meter']:.0f} m"
+            f"{nearest_hospital['name']} 距 {format_distance(nearest_hospital['meter'])}"
             if nearest_hospital
             else "本日無最近醫院"
         )
@@ -3276,12 +3302,12 @@ def render_weekly_summary_cards(cards: list[dict[str, object]]) -> None:
             <div class="candidate-sub">風險優先分：{float(card.get('risk_priority_score', 0)):.0f} / 原始分數：{float(card.get('risk_score', 0)):.0f} / 需覆核點數：{card.get('review_count', 0)}</div>
             <div class="candidate-sub"><strong>主要問題：</strong>{html_lib.escape(str(card.get('primary_issue') or '未見明顯風險'))}</div>
             <div class="candidate-sub">風險摘要：{risk_summary_text}</div>
-            <div class="candidate-sub"><strong>居家風險：</strong>住家1000m內 {int(v3_categories.get('home_within_1000_count', 0))} 次；當天只在家附近：{int(v3_categories.get('home_only_day', 0))}</div>
+            <div class="candidate-sub"><strong>居家風險：</strong>住家1000公尺內 {int(v3_categories.get('home_within_1000_count', 0))} 次；當天只在家附近：{int(v3_categories.get('home_only_day', 0))}</div>
             <div class="candidate-sub"><strong>既有客戶拜訪：</strong>{html_lib.escape(existing_visit_text)}</div>
-            <div class="candidate-sub"><strong>未知外勤點：</strong>{int(v3_categories.get('unknown_field_count', 0))} 次；潛在院所Top3：{html_lib.escape(prospect_text)}</div>
+            <div class="candidate-sub"><strong>未知出勤點：</strong>{int(v3_categories.get('unknown_field_count', 0))} 次；潛在院所Top3：{html_lib.escape(prospect_text)}</div>
             <div class="candidate-sub">最近既有客戶：{nearest_client_text}</div>
             <div class="candidate-sub">最近醫院：{nearest_hospital_text}</div>
-            <div class="candidate-sub">v3既有客戶拜訪清單</div>
+            <div class="candidate-sub">既有客戶拜訪清單</div>
             <ul class="weekly-day-list">{selected_html}</ul>
         </div>
         """
@@ -3486,7 +3512,7 @@ def build_weekly_map(
                 "編號：%{customdata[4]}<br>"
                 "時間：%{customdata[1]}<br>"
                 "座標：%{lat:.6f}, %{lon:.6f}<br>"
-                "v3判定：%{customdata[2]}<br>"
+                "系統判定：%{customdata[2]}<br>"
                 "類型：%{customdata[3]}<br>"
                 "追查重點：%{customdata[5]}<br>"
                 "證據：%{customdata[6]}<extra></extra>"
@@ -3607,7 +3633,8 @@ def build_candidate_panel(day_events: pd.DataFrame, matches: pd.DataFrame) -> li
     for _, group in candidates.groupby(["seq_no", "event_uid", "actual_time_display", "gps_lat", "gps_lon"], dropna=False):
         group = group.sort_values("candidate_rank").copy()
         first_row = group.iloc[0]
-        top_candidates = group.head(5).copy()
+        nearby_candidates = group.loc[pd.to_numeric(group["beeline_meter"], errors="coerce").le(1000)].copy()
+        top_candidates = (nearby_candidates if not nearby_candidates.empty else group).head(10).copy()
         candidate_items = []
         for _, row in top_candidates.iterrows():
             candidate_items.append(
@@ -3619,6 +3646,11 @@ def build_candidate_panel(day_events: pd.DataFrame, matches: pd.DataFrame) -> li
                     "selected": False,
                 }
             )
+        prospect_top3_items = [
+            item
+            for item in candidate_items
+            if item["tag"] != "既有客戶" and float(item["distance"]) <= 500
+        ][:3]
         panels.append(
             {
                 "seq_no": int(first_row["seq_no"]),
@@ -3652,6 +3684,7 @@ def build_candidate_panel(day_events: pd.DataFrame, matches: pd.DataFrame) -> li
                 "event_evidence_summary": first_row["event_evidence_summary"] if pd.notna(first_row["event_evidence_summary"]) else "",
                 "risk_priority": float(first_row["risk_priority"]) if pd.notna(first_row["risk_priority"]) else 0.0,
                 "candidates": candidate_items,
+                "prospect_top3_items": prospect_top3_items,
             }
         )
     return panels
@@ -3665,8 +3698,8 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
     st.markdown(
         """
         <div class="candidate-panel-header">
-            <div class="candidate-title">打卡點候選院所</div>
-            <div class="candidate-sub">依每個 GPS 打卡點列出 v3 系統判定、最近既有客戶、最近醫院與前五候選名單。</div>
+            <div class="candidate-title">打卡點判定</div>
+            <div class="candidate-sub">依每個 GPS 打卡點列出住家判定、系統判定、最近既有客戶、最近醫院與潛在院所 Top3。</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -3674,16 +3707,6 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
     for row_panels in chunked(candidate_panels, 2):
         columns = st.columns(2)
         for column, panel in zip(columns, row_panels):
-            nearest_client_text = (
-                f"{panel['nearest_client_name']} · {panel['nearest_client_meter']:.0f} m"
-                if panel["nearest_client_name"] and panel["nearest_client_meter"] is not None
-                else "無既有客戶資料"
-            )
-            nearest_text = (
-                f"{panel['nearest_hospital_only_name']} · {panel['nearest_hospital_only_meter']:.0f} m"
-                if panel["nearest_hospital_only_name"] and panel["nearest_hospital_only_meter"] is not None
-                else "醫院主檔中沒有可判定為醫院的院所"
-            )
             list_items = []
             for item in panel["candidates"]:
                 tag_class = (
@@ -3691,75 +3714,69 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
                     else "tag-hospital" if item["tag"] == "醫院"
                     else "tag-potential"
                 )
-                selected_suffix = "（候選標記）" if item.get("selected") else ""
                 rank_suffix = f"（候選#{item['rank']}）" if int(item["rank"]) > 5 else ""
                 list_items.append(
-                    f"<li>{item['name']}{selected_suffix}{rank_suffix} · {item['distance']:.0f} m "
+                    f"<li>{item['name']}{rank_suffix} · {format_distance(item['distance'])} "
                     f"<span class=\"{tag_class}\">{item['tag']}</span></li>"
                 )
-            visible_list_items = list_items[:3]
-            hidden_candidate_count = max(len(list_items) - len(visible_list_items), 0)
+            hidden_candidate_count = len(list_items)
             risk_level = panel.get("risk_level") or NORMAL_LABEL
             risk_score = float(panel.get("risk_score") or 0)
             review_score = float(panel.get("review_score") or 0)
             home_distance = panel.get("distance_from_home_m")
-            home_bucket = str(panel.get("home_distance_bucket") or "").strip()
-            if not home_bucket:
-                home_bucket = f"{float(home_distance):.0f} m" if home_distance is not None else "無住家距離資料"
+            home_bucket = (
+                format_distance(home_distance)
+                if home_distance is not None
+                else str(panel.get("home_distance_bucket") or "").strip() or "無住家距離資料"
+            )
             location_class = str(panel.get("location_class") or "").strip()
             home_only_hint = "是" if location_class in {"home_core", "home_edge"} else "否"
-            selected_visit_name = str(panel.get("selected_visit_name") or "未選定").strip()
+            selected_visit_name = str(panel.get("selected_visit_name") or "未判定").strip()
             selected_visit_type = str(panel.get("selected_visit_type") or "").strip()
             selected_visit_distance = panel.get("selected_visit_distance_m")
-            selected_visit_distance_text = f"{float(selected_visit_distance):.0f} m" if selected_visit_distance is not None else "-"
-            v3_tag_class = (
+            selected_visit_distance_text = format_distance(selected_visit_distance) if selected_visit_distance is not None else "-"
+            decision_tag_class = (
                 "tag-client" if location_class == "existing_client_visit"
                 else "tag-potential" if location_class == "unknown_field"
                 else "tag-risk-review" if location_class in {"home_core", "home_edge"}
                 else "tag-risk-normal"
             )
-            field_decision_html = (
-                f'<div class="candidate-sub"><strong>既有客戶拜訪：</strong>{html_lib.escape(selected_visit_name)} '
-                f'{html_lib.escape(selected_visit_distance_text)} <span class="{v3_tag_class}">'
-                f"{html_lib.escape(selected_visit_type)}</span></div>"
-                if location_class == "existing_client_visit"
-                else '<div class="candidate-sub"><strong>既有客戶拜訪：</strong>未命中 1000m 內既有客戶</div>'
-            )
-            existing_top3 = str(panel.get("existing_client_candidates_top3") or "1000m 內無既有客戶").strip()
-            suggested_top3 = str(panel.get("suggested_prospects_top3") or "500m 內無潛在院所").strip()
-            unknown_decision_html = (
-                f'<div class="candidate-sub"><strong>未知外勤點判定：</strong>{html_lib.escape(selected_visit_name)} '
-                f'<span class="{v3_tag_class}">{html_lib.escape(selected_visit_type)}</span>；'
-                f"潛在院所Top3：{html_lib.escape(suggested_top3)}</div>"
-                if location_class == "unknown_field"
-                else f'<div class="candidate-sub"><strong>未知外勤點判定：</strong>不適用；'
-                f"潛在院所Top3：{html_lib.escape(suggested_top3)}</div>"
-            )
-            nearest_existing_name = str(panel.get("nearest_existing_client_name") or "").strip()
-            nearest_existing_distance = panel.get("nearest_existing_client_distance_m")
-            nearest_existing_text = (
-                f"{nearest_existing_name} {float(nearest_existing_distance):.0f} m"
-                if nearest_existing_name and nearest_existing_distance is not None
+            prospect_top3_items = panel.get("prospect_top3_items") or []
+            suggested_top3 = "；".join(
+                f"{item['name']} · {format_distance(item['distance'])} {item['tag']}"
+                for item in prospect_top3_items
+            ) or "500公尺內無潛在院所"
+            nearest_client_name = str(panel.get("nearest_client_name") or "").strip()
+            nearest_client_distance = panel.get("nearest_client_meter")
+            nearest_client_text = (
+                f"{nearest_client_name} {format_distance(nearest_client_distance)}"
+                if nearest_client_name and nearest_client_distance is not None
                 else "無最近既有客戶資料"
             )
-            v3_nearest_hospital_name = str(panel.get("v3_nearest_hospital_name") or "").strip()
-            v3_nearest_hospital_distance = panel.get("v3_nearest_hospital_distance_m")
-            v3_nearest_hospital_text = (
-                f"{v3_nearest_hospital_name} {float(v3_nearest_hospital_distance):.0f} m"
-                if v3_nearest_hospital_name and v3_nearest_hospital_distance is not None
+            nearest_hospital_name = str(panel.get("nearest_hospital_only_name") or "").strip()
+            nearest_hospital_distance = panel.get("nearest_hospital_only_meter")
+            nearest_hospital_text = (
+                f"{nearest_hospital_name} {format_distance(nearest_hospital_distance)}"
+                if nearest_hospital_name and nearest_hospital_distance is not None
                 else "無最近醫院資料"
             )
-            v3_category_html = (
+            decision_text = selected_visit_name
+            if selected_visit_distance is not None:
+                decision_text = f"{decision_text} {selected_visit_distance_text}"
+            decision_type = selected_visit_type or "未分類"
+            decision_html = (
                 f'<div class="candidate-sub"><strong>居家風險：</strong>距離住家 {html_lib.escape(home_bucket)}；'
                 f"本點在家附近：{home_only_hint}</div>"
-                f'<div class="candidate-sub"><strong>v3系統判定：</strong>{html_lib.escape(selected_visit_name)} '
-                f'{html_lib.escape(selected_visit_distance_text)} <span class="{v3_tag_class}">'
-                f"{html_lib.escape(selected_visit_type)}</span></div>"
-                f"{field_decision_html}"
-                f'<div class="candidate-sub">既有客戶候選Top3：{html_lib.escape(existing_top3)}</div>'
-                f"{unknown_decision_html}"
-                f'<div class="candidate-sub">最近既有客戶：{html_lib.escape(nearest_existing_text)}；'
-                f"最近醫院：{html_lib.escape(v3_nearest_hospital_text)}</div>"
+                f'<div class="candidate-sub"><strong>系統判定：</strong>{html_lib.escape(decision_text)} '
+                f'<span class="{decision_tag_class}">{html_lib.escape(decision_type)}</span></div>'
+            )
+            support_lines = [
+                f"最近既有客戶：{nearest_client_text}",
+                f"最近醫院：{nearest_hospital_text}",
+                f"潛在院所Top3：{suggested_top3}",
+            ]
+            support_html = "".join(
+                f'<div class="candidate-sub">{html_lib.escape(line)}</div>' for line in support_lines if str(line).strip()
             )
             risk_reason = str(panel.get("risk_reason_text") or "").strip()
             risk_focus = str(panel.get("event_risk_focus") or "").strip()
@@ -3775,28 +3792,20 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
                 risk_html += f'<div class="candidate-sub"><strong>證據摘要：</strong>{html_lib.escape(evidence_summary)}</div>'
             if risk_reason:
                 risk_html += '<div class="candidate-sub">覆核原因：展開查看完整證據</div>'
-            more_candidates_html = (
-                f'<div class="candidate-sub">另有 {hidden_candidate_count} 個候選院所可展開查看</div>'
-                if hidden_candidate_count > 0
-                else ""
-            )
+            more_candidates_html = '<div class="candidate-sub">證據摘要與更多可能候選可展開查看</div>'
             html = f"""
             <div class="candidate-card">
                 <div class="candidate-title">#{panel['seq_no']} {panel['time']}</div>
                 <div class="candidate-sub">座標：{panel['lat']:.6f}, {panel['lon']:.6f}</div>
-                {v3_category_html}
-                <div class="candidate-sub">最近既有客戶：{nearest_client_text}</div>
-                <div class="candidate-sub">最近醫院：{nearest_text}</div>
+                {decision_html}
+                {support_html}
                 {risk_html}
-                <ol class="candidate-list">
-                    {''.join(visible_list_items)}
-                </ol>
                 {more_candidates_html}
             </div>
             """
             column.markdown(html, unsafe_allow_html=True)
             if risk_reason or hidden_candidate_count > 0 or risk_focus or evidence_summary:
-                with column.expander(f"#{panel['seq_no']} 完整候選與風險證據"):
+                with column.expander(f"#{panel['seq_no']} 證據摘要與更多候選"):
                     if risk_focus:
                         st.markdown(f"**追查重點**：{html_lib.escape(risk_focus)}")
                     if evidence_summary:
@@ -3974,6 +3983,9 @@ def summarize_period(
                 "僅居家附近軌跡天數": int((merged["home_area_only_trace"] > 0).sum()),
                 "住家起訖但缺外勤軌跡天數": int((merged["home_start_end_without_field_trace"] > 0).sum()),
                 "路線佐證不足天數": int((merged["insufficient_route_evidence"] > 0).sum()),
+                "打卡不足天數": int((merged["insufficient_checkin_count"] > 0).sum()),
+                "出勤時數過短天數": int((merged["short_attendance_span"] > 0).sum()),
+                "出勤時數過長天數": int((merged["long_attendance_span"] > 0).sum()),
             }
         ]
     )
@@ -4002,6 +4014,9 @@ def summarize_period(
             "home_area_only_trace",
             "home_start_end_without_field_trace",
             "insufficient_route_evidence",
+            "insufficient_checkin_count",
+            "short_attendance_span",
+            "long_attendance_span",
             "home_near_event_count",
             "max_distance_from_home_m",
             "field_visit_count",
@@ -4043,8 +4058,11 @@ def summarize_period(
             "home_area_only_trace": "僅居家附近軌跡",
             "home_start_end_without_field_trace": "住家起訖但缺外勤軌跡",
             "insufficient_route_evidence": "路線佐證不足",
+            "insufficient_checkin_count": "打卡不足",
+            "short_attendance_span": "出勤時數過短",
+            "long_attendance_span": "出勤時數過長",
             "home_near_event_count": "住家附近打卡點數",
-            "max_distance_from_home_m": "離家最遠距離(公尺)",
+            "max_distance_from_home_m": "離家最遠距離",
             "field_visit_count": "外勤拜訪佐證數",
             "primary_risk_reason": "主要風險原因",
             "risk_drilldown_hint": "追查提示",
@@ -4060,6 +4078,7 @@ def summarize_period(
             "source_quality_status": "資料品質",
         }
     )
+    detail = apply_distance_display(detail, ["離家最遠距離"])
     return summary, detail
 
 
@@ -4089,6 +4108,9 @@ def build_overview_summary(
         "home_area_only_trace",
         "home_start_end_without_field_trace",
         "insufficient_route_evidence",
+        "insufficient_checkin_count",
+        "short_attendance_span",
+        "long_attendance_span",
     ]
 
     base = attendance.loc[attendance_mask].copy()
@@ -4133,6 +4155,9 @@ def build_overview_summary(
         "home_area_only_trace",
         "home_start_end_without_field_trace",
         "insufficient_route_evidence",
+        "insufficient_checkin_count",
+        "short_attendance_span",
+        "long_attendance_span",
     ]:
         merged[column] = pd.to_numeric(merged[column], errors="coerce").fillna(0)
 
@@ -4154,6 +4179,9 @@ def build_overview_summary(
             僅居家附近軌跡天數=("home_area_only_trace", lambda s: int((s.fillna(0) > 0).sum())),
             住家起訖但缺外勤軌跡天數=("home_start_end_without_field_trace", lambda s: int((s.fillna(0) > 0).sum())),
             路線佐證不足天數=("insufficient_route_evidence", lambda s: int((s.fillna(0) > 0).sum())),
+            打卡不足天數=("insufficient_checkin_count", lambda s: int((s.fillna(0) > 0).sum())),
+            出勤時數過短天數=("short_attendance_span", lambda s: int((s.fillna(0) > 0).sum())),
+            出勤時數過長天數=("long_attendance_span", lambda s: int((s.fillna(0) > 0).sum())),
             平均路徑信心=("route_confidence", lambda s: round(s.fillna(0).mean(), 4)),
             異常率=("anomaly_flag", lambda s: round(float(s.fillna(False).mean()), 4)),
             超時出勤率=("overtime_flag_bool", lambda s: round(float(s.fillna(False).mean()), 4)),
@@ -4417,7 +4445,7 @@ def format_distance_summary(group: pd.DataFrame, name_col: str, distance_col: st
         if tag_col and tag_col in work.columns and pd.notna(row.get(tag_col)) and str(row.get(tag_col)).strip():
             label = f"{label}（{str(row.get(tag_col)).strip()}）"
         if distance_col in work.columns and pd.notna(row.get(distance_col)):
-            label = f"{label} · {int(round(float(row[distance_col])))} m"
+            label = f"{label} · {format_distance(row[distance_col])}"
         items.append(label)
     return "；".join(items)
 
@@ -4604,7 +4632,7 @@ def build_google_sheet_reference_payload(
     selected_summary = (
         selected_matches_for_summary.groupby("attendance_uid", dropna=False)[["selected_visit_name", "selected_visit_distance_m", "selected_visit_type"]]
         .apply(lambda group: format_distance_summary(group, "selected_visit_name", "selected_visit_distance_m", "selected_visit_type"))
-        .reset_index(name="v3既有客戶拜訪清單")
+        .reset_index(name="既有客戶拜訪清單")
     )
     nearest_client_summary = (
         detail_events.groupby("attendance_uid", dropna=False)[["nearest_client_name", "nearest_client_meter"]]
@@ -4682,7 +4710,7 @@ def build_google_sheet_reference_payload(
             "risk_reason_summary",
             "最近既有客戶清單",
             "最近醫院清單",
-            "v3既有客戶拜訪清單",
+            "既有客戶拜訪清單",
             "claimed_km",
             "difference_km",
             "difference_rate",
@@ -4723,7 +4751,7 @@ def build_google_sheet_reference_payload(
             "home_start_end_without_field_trace": "住家起訖但缺外勤軌跡",
             "insufficient_route_evidence": "路線佐證不足",
             "home_near_event_count": "住家附近打卡點數",
-            "max_distance_from_home_m": "離家最遠距離(m)",
+            "max_distance_from_home_m": "離家最遠距離",
             "field_visit_count": "外勤拜訪佐證數",
             "risk_reason_summary": "覆核原因代碼",
             "claimed_km": "實際月申請里程(km)",
@@ -4833,30 +4861,42 @@ def build_google_sheet_reference_payload(
             "gps_lat": "緯度",
             "gps_lon": "經度",
             "nearest_client_name": "最近既有客戶",
-            "nearest_client_meter": "最近既有客戶距離(m)",
+            "nearest_client_meter": "最近既有客戶距離",
             "nearest_hospital_only_name": "最近醫院",
-            "nearest_hospital_only_meter": "最近醫院距離(m)",
-            "location_class": "v3分類",
-            "selected_visit_name": "v3系統判定",
-            "selected_visit_distance_m": "v3判定距離(m)",
-            "selected_visit_type": "v3判定類型",
+            "nearest_hospital_only_meter": "最近醫院距離",
+            "location_class": "分類",
+            "selected_visit_name": "系統判定",
+            "selected_visit_distance_m": "判定距離",
+            "selected_visit_type": "判定類型",
             "risk_level": "覆核狀態",
             "risk_score": "風險分數",
             "risk_reason_text": "覆核原因",
             "selected_rank": "系統選定候選排名",
-            "selected_distance_m": "系統選定風險距離(m)",
-            "nearest_distance_m": "最近候選風險距離(m)",
-            "distance_gap_m": "選定與最近距離差(m)",
+            "selected_distance_m": "系統選定風險距離",
+            "nearest_distance_m": "最近候選風險距離",
+            "distance_gap_m": "選定與最近距離差",
         }
     )
     detail_sheet["日期"] = pd.to_datetime(detail_sheet["日期"], errors="coerce").dt.strftime("%Y-%m-%d")
+    daily_sheet = apply_distance_display(daily_sheet, ["離家最遠距離"])
+    detail_sheet = apply_distance_display(
+        detail_sheet,
+        [
+            "最近既有客戶距離",
+            "最近醫院距離",
+            "判定距離",
+            "系統選定風險距離",
+            "最近候選風險距離",
+            "選定與最近距離差",
+        ],
+    )
 
     instruction_rows = [
         ["工作表", "用途", "填寫說明"],
         ["員工月度彙總", "給業務助理 / 財會快速查看每位員工每月估算里程與補貼總額。", "可填寫：核定油費、核定日當費、核定狀態、核定備註。"],
         ["月度核定總表", "一列一筆員工單日出勤，供檢視每日里程、時數、預測拜訪院所。", "可依日期、員工、部門篩選，作為日當費 / 油費核定參考。"],
-        ["每日拜訪明細", "一列一個打卡點，供追查單點來源、最近既有客戶、最近醫院與 v3 系統判定。", "若需要覆核當天拜訪脈絡，可回看這張明細。"],
-        ["欄位說明", "v3系統判定依序為：極近居家點、1000m 內既有客戶、邊緣居家點、未知外勤點。", "本報表僅供核定參考，實際核定結果仍以助理 / 財會填寫回傳為準。"],
+        ["每日拜訪明細", "一列一個打卡點，供追查單點來源、最近既有客戶、最近醫院與系統判定。", "若需要覆核當天拜訪脈絡，可回看這張明細。"],
+        ["欄位說明", "系統判定依序為：極近居家點、1000公尺內既有客戶、邊緣居家點、未知出勤點。", "本報表僅供核定參考，實際核定結果仍以助理 / 財會填寫回傳為準。"],
     ]
 
     return {
@@ -5161,23 +5201,23 @@ with tab_daily:
             "gps_lon": "經度",
             "compare_result": "比對結果",
             "source_type": "來源",
-            "nearest_client_name": "最近既有客戶",
-            "nearest_client_meter": "最近既有客戶距離(公尺)",
+            "nearest_client_name": "候選最近既有客戶",
+            "nearest_client_meter": "候選最近既有客戶距離",
             "nearest_hospital_name": "最近院所",
-            "nearest_hospital_meter": "最近院所距離(公尺)",
-            "nearest_hospital_only_name": "最近醫院",
-            "nearest_hospital_only_meter": "最近醫院距離(公尺)",
-            "location_class": "v3分類",
-            "selected_visit_name": "v3系統選定",
-            "selected_visit_type": "v3選定類型",
-            "selected_visit_distance_m": "v3選定距離(m)",
+            "nearest_hospital_meter": "最近院所距離",
+            "nearest_hospital_only_name": "候選最近醫院",
+            "nearest_hospital_only_meter": "候選最近醫院距離",
+            "location_class": "分類",
+            "selected_visit_name": "系統判定",
+            "selected_visit_type": "判定類型",
+            "selected_visit_distance_m": "判定距離",
             "home_distance_bucket": "居家距離區間",
             "existing_client_candidates_top3": "既有客戶候選Top3",
             "suggested_prospects_top3": "潛在院所Top3",
-            "nearest_existing_client_name": "最近既有客戶(v3)",
-            "nearest_existing_client_distance_m": "最近既有客戶距離(v3,m)",
-            "v3_nearest_hospital_name": "最近醫院(v3)",
-            "v3_nearest_hospital_distance_m": "最近醫院距離(v3,m)",
+            "nearest_existing_client_name": "最近既有客戶",
+            "nearest_existing_client_distance_m": "最近既有客戶距離",
+            "v3_nearest_hospital_name": "最近醫院",
+            "v3_nearest_hospital_distance_m": "最近醫院距離",
             "risk_level": "覆核狀態",
             "risk_score": "風險分數",
             "review_score": "需覆核點數",
@@ -5185,10 +5225,24 @@ with tab_daily:
             "event_evidence_summary": "證據摘要",
             "risk_reason_text": "覆核原因",
             "selected_rank": "系統選定候選排名",
-            "selected_distance_m": "系統選定風險距離(m)",
-            "nearest_distance_m": "最近候選風險距離(m)",
-            "distance_gap_m": "選定與最近距離差(m)",
+            "selected_distance_m": "系統選定風險距離",
+            "nearest_distance_m": "最近候選風險距離",
+            "distance_gap_m": "選定與最近距離差",
         }
+    )
+    event_detail = apply_distance_display(
+        event_detail,
+        [
+            "候選最近既有客戶距離",
+            "最近院所距離",
+            "候選最近醫院距離",
+            "判定距離",
+            "最近既有客戶距離",
+            "最近醫院距離",
+            "系統選定風險距離",
+            "最近候選風險距離",
+            "選定與最近距離差",
+        ],
     )
     detail_tab, finance_tab = st.tabs(["當日事件明細", "當日財務摘要"])
     with detail_tab:
@@ -5200,12 +5254,12 @@ with tab_daily:
                 "比對結果",
                 "來源",
                 "最近既有客戶",
-                "最近既有客戶距離(公尺)",
+                "最近既有客戶距離",
                 "最近醫院",
-                "最近醫院距離(公尺)",
-                "v3分類",
-                "v3系統選定",
-                "v3選定類型",
+                "最近醫院距離",
+                "分類",
+                "系統判定",
+                "判定類型",
                 "居家距離區間",
                 "既有客戶候選Top3",
                 "潛在院所Top3",
@@ -5224,12 +5278,10 @@ with tab_daily:
             column_config={
                 "緯度": st.column_config.NumberColumn(format="%.6f"),
                 "經度": st.column_config.NumberColumn(format="%.6f"),
-                "最近既有客戶距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
-                "最近院所距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
-                "最近醫院距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
-                "v3選定距離(m)": st.column_config.NumberColumn(format="%.0f m"),
-                "最近既有客戶距離(v3,m)": st.column_config.NumberColumn(format="%.0f m"),
-                "最近醫院距離(v3,m)": st.column_config.NumberColumn(format="%.0f m"),
+                "最近既有客戶距離": st.column_config.TextColumn(width="small"),
+                "最近院所距離": st.column_config.TextColumn(width="small"),
+                "最近醫院距離": st.column_config.TextColumn(width="small"),
+                "判定距離": st.column_config.TextColumn(width="small"),
                 "風險分數": st.column_config.NumberColumn(format="%.0f"),
                 "需覆核點數": st.column_config.NumberColumn(format="%.0f"),
             },
@@ -5416,9 +5468,9 @@ with tab_weekly:
         f"""
         <div class="section-card route-context-card" style="padding:0.85rem 1rem;">
             <div class="candidate-title">週報分類摘要</div>
-            <div class="candidate-sub"><strong>居家風險：</strong>住家1000m內打卡 {weekly_home_1000_total} 次；當天只有在家附近打卡 {weekly_home_only_days} 天</div>
+            <div class="candidate-sub"><strong>居家風險：</strong>住家1000公尺內打卡 {weekly_home_1000_total} 次；當天只有在家附近打卡 {weekly_home_only_days} 天</div>
             <div class="candidate-sub"><strong>既有客戶拜訪：</strong>{html_lib.escape(weekly_existing_text)}</div>
-            <div class="candidate-sub"><strong>未知外勤點：</strong>{weekly_unknown_field_total} 次；潛在院所Top3出現次數：{html_lib.escape(weekly_prospect_text)}</div>
+            <div class="candidate-sub"><strong>未知出勤點：</strong>{weekly_unknown_field_total} 次；潛在院所Top3出現次數：{html_lib.escape(weekly_prospect_text)}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -5536,9 +5588,10 @@ with tab_period:
             [
                 ("需覆核點數", summary_row["需覆核點數"], "int"),
                 ("高風險點數", summary_row["高風險點數"], "int"),
-                ("低信心點數", summary_row["低信心點數"], "int"),
                 ("平均風險優先分", summary_row["平均風險優先分"], "float"),
                 ("僅居家附近軌跡天數", summary_row["僅居家附近軌跡天數"], "int"),
+                ("打卡不足天數", summary_row["打卡不足天數"], "int"),
+                ("出勤時數過短天數", summary_row["出勤時數過短天數"], "int"),
             ],
             "先看這一區判斷是否需要追查；下方出勤、里程、財務資料作為佐證。",
         )
@@ -5607,13 +5660,15 @@ with tab_period:
                         "high_risk_event_count": "高風險點數",
                         "review_event_count": "需覆核點數",
                         "home_area_only_days": "僅居家附近天數",
+                        "insufficient_checkin_days": "打卡不足天數",
+                        "short_attendance_span_days": "出勤時數過短天數",
                         "claim_diff_abs_rate": "申報差異率絕對值",
                     }
                 )
                 fig_personal_stack = px.bar(
                     monthly_event_view,
                     x="month_index",
-                    y=["高風險點數", "需覆核點數", "僅居家附近天數"],
+                    y=["高風險點數", "需覆核點數", "僅居家附近天數", "打卡不足天數", "出勤時數過短天數"],
                     barmode="group",
                     labels={"value": "數量", "variable": "指標"},
                 )
@@ -5628,7 +5683,7 @@ with tab_period:
                     range=[-0.5, max(len(personal_month_order) - 0.5, 0.5)],
                 )
                 fig_personal_stack.update_layout(
-                    title_text="個人風險月趨勢：風險指標數量",
+                    title_text="個人風險月趨勢：風險來源指標",
                     height=250,
                     margin=dict(l=36, r=8, t=28, b=42),
                     legend=dict(orientation="h", yanchor="top", y=-0.28, xanchor="left", x=0),
@@ -5788,6 +5843,9 @@ with tab_period:
                 "主要風險原因",
                 "追查提示",
                 "覆核原因摘要",
+                "打卡不足",
+                "出勤時數過短",
+                "出勤時數過長",
                 "未打卡未處理次數",
                 "忘刷申請次數",
                 "比對摘要",
@@ -5811,8 +5869,11 @@ with tab_period:
                 "需覆核點數": st.column_config.NumberColumn(format="%d"),
                 "高風險點數": st.column_config.NumberColumn(format="%d"),
                 "低信心點數": st.column_config.NumberColumn(format="%d"),
+                "打卡不足": st.column_config.NumberColumn(format="%d"),
+                "出勤時數過短": st.column_config.NumberColumn(format="%d"),
+                "出勤時數過長": st.column_config.NumberColumn(format="%d"),
                 "住家附近打卡點數": st.column_config.NumberColumn(format="%d"),
-                "離家最遠距離(公尺)": st.column_config.NumberColumn(format="%.0f m"),
+                "離家最遠距離": st.column_config.TextColumn(width="small"),
                 "外勤拜訪佐證數": st.column_config.NumberColumn(format="%d"),
                 "未打卡未處理次數": st.column_config.NumberColumn(format="%d"),
                 "未打卡已處理次數": st.column_config.NumberColumn(format="%d"),
@@ -6245,12 +6306,14 @@ with tab_overview:
                     "high_risk_event_count": "高風險點數",
                     "review_event_count": "需覆核點數",
                     "home_area_only_days": "僅居家附近天數",
+                    "insufficient_checkin_days": "打卡不足天數",
+                    "short_attendance_span_days": "出勤時數過短天數",
                 }
             )
             fig_company_stack = px.bar(
                 company_monthly_view,
                 x="month_index",
-                y=["高風險點數", "需覆核點數", "僅居家附近天數"],
+                y=["高風險點數", "需覆核點數", "僅居家附近天數", "打卡不足天數", "出勤時數過短天數"],
                 barmode="group",
                 labels={"value": "數量", "variable": "指標"},
             )
@@ -6266,7 +6329,7 @@ with tab_overview:
             )
             apply_overview_chart_print_layout(
                 fig_company_stack,
-                "月風險類型分布",
+                "月風險來源分布",
                 height=300,
                 margin=dict(l=44, r=72, t=34, b=48),
             )
@@ -6349,8 +6412,8 @@ with tab_overview:
             )
 
     st.markdown("**優先追查排行**")
-    high_risk_rank = (
-        overview_summary.sort_values(["高風險點數", "風險優先分"], ascending=[False, False])
+    priority_risk_rank = (
+        overview_summary.sort_values(["風險優先分", "平均風險優先分"], ascending=[False, False])
         if not overview_summary.empty
         else overview_summary
     )
@@ -6371,7 +6434,7 @@ with tab_overview:
     )
     render_print_ranking_grid(
         [
-            ("高風險員工 Top 5", high_risk_rank, "employee_label", "高風險點數", "int"),
+            ("風險優先分 Top 5", priority_risk_rank, "employee_label", "風險優先分", "float"),
             ("需覆核點數 Top 5", review_rank, "employee_label", "需覆核點數", "int"),
             ("僅居家附近 Top 5", home_rank, "employee_label", "僅居家附近軌跡天數", "int"),
             ("申報差異 Top 5", claim_diff_rank, "employee_label", "差異率絕對值", "percent"),
@@ -6381,11 +6444,11 @@ with tab_overview:
     rank_col1, rank_col2, rank_col3, rank_col4 = st.columns(4)
     with rank_col1:
         render_clickable_ranking_card(
-            "高風險員工 Top 5",
-            high_risk_rank,
+            "風險優先分 Top 5",
+            priority_risk_rank,
             "employee_label",
-            "高風險點數",
-            "high_risk",
+            "風險優先分",
+            "priority_risk",
         )
     with rank_col2:
         render_clickable_ranking_card(
@@ -6554,13 +6617,20 @@ with tab_overview:
     risk_chart1 = st.container()
     risk_chart2 = st.container()
     with risk_chart1:
-        render_overview_chart_heading("員工風險排名")
+        render_overview_chart_heading("員工風險來源拆解")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
+            risk_source_columns = [
+                "需覆核點數",
+                "高風險點數",
+                "僅居家附近軌跡天數",
+                "打卡不足天數",
+                "出勤時數過短天數",
+            ]
             fig_risk_rank = px.bar(
                 overview_summary.sort_values("風險優先分", ascending=True),
-                x=["需覆核點數", "高風險點數", "低信心點數", "僅居家附近軌跡天數"],
+                x=risk_source_columns,
                 y="employee_label",
                 barmode="group",
                 orientation="h",
@@ -6568,12 +6638,12 @@ with tab_overview:
             )
             apply_overview_chart_print_layout(
                 fig_risk_rank,
-                "員工風險排名",
+                "員工風險來源拆解",
                 height=360,
                 margin=dict(l=132, r=160, t=36, b=42),
             )
             risk_rank_max = pd.to_numeric(
-                overview_summary[["需覆核點數", "高風險點數", "低信心點數", "僅居家附近軌跡天數"]].stack(),
+                overview_summary[risk_source_columns].stack(),
                 errors="coerce",
             ).fillna(0).max()
             fig_risk_rank.update_xaxes(range=[0, max(float(risk_rank_max) * 1.12, 1.0)], automargin=True)
@@ -6590,7 +6660,15 @@ with tab_overview:
                 color="department",
                 orientation="h",
                 labels={"employee_label": "員工", "風險優先分": "風險優先分", "department": "部門"},
-                hover_data={"需覆核點數": True, "高風險點數": True, "低信心點數": True, "風險分數": True, "平均風險優先分": ":.2f"},
+                hover_data={
+                    "需覆核點數": True,
+                    "高風險點數": True,
+                    "僅居家附近軌跡天數": True,
+                    "打卡不足天數": True,
+                    "出勤時數過短天數": True,
+                    "風險分數": True,
+                    "平均風險優先分": ":.2f",
+                },
             )
             apply_overview_chart_print_layout(
                 fig_risk_score,
@@ -6811,6 +6889,9 @@ with tab_overview:
             "主要風險原因",
             "追查提示",
             "僅居家附近軌跡天數",
+            "打卡不足天數",
+            "出勤時數過短天數",
+            "出勤時數過長天數",
             "異常率",
             "超時出勤率",
             "油資補貼",
@@ -6867,6 +6948,9 @@ with tab_overview:
             "僅居家附近軌跡天數",
             "住家起訖但缺外勤軌跡天數",
             "路線佐證不足天數",
+            "打卡不足天數",
+            "出勤時數過短天數",
+            "出勤時數過長天數",
         ]
         st.dataframe(
             overview_summary_view.sort_values("risk_priority", ascending=False)[[column for column in risk_columns if column in overview_summary_view.columns]],
@@ -6883,6 +6967,9 @@ with tab_overview:
                 "僅居家附近軌跡天數": st.column_config.NumberColumn(format="%d"),
                 "住家起訖但缺外勤軌跡天數": st.column_config.NumberColumn(format="%d"),
                 "路線佐證不足天數": st.column_config.NumberColumn(format="%d"),
+                "打卡不足天數": st.column_config.NumberColumn(format="%d"),
+                "出勤時數過短天數": st.column_config.NumberColumn(format="%d"),
+                "出勤時數過長天數": st.column_config.NumberColumn(format="%d"),
             },
         )
     with finance_table_tab:
@@ -7309,7 +7396,7 @@ with tab_settings:
         with risk_col1:
             hospital_priority_distance_m = st.number_input("醫院優先距離 (m)", min_value=0.0, max_value=10000.0, value=float(editable["hospital_priority_distance_m"]), step=50.0, help="hospital_priority_distance_m：醫院在此距離內可優先於較遠的潛在院所或過遠既有客戶。")
             existing_client_priority_distance_m = st.number_input("既有客戶優先距離 (m)", min_value=0.0, max_value=10000.0, value=float(editable["existing_client_priority_distance_m"]), step=50.0, help="existing_client_priority_distance_m：既有客戶只有在此距離內才固定享有最高選定優先權。")
-            risk_auto_select_max_distance_m = st.number_input("候選選取距離門檻 (m)", min_value=0.0, max_value=20000.0, value=float(editable["risk_auto_select_max_distance_m"]), step=50.0, help="risk_auto_select_max_distance_m：舊候選選取距離參數；v3 最終判定以居家攔截、1000m 既有客戶與未知外勤分類為準。")
+            risk_auto_select_max_distance_m = st.number_input("候選選取距離門檻 (m)", min_value=0.0, max_value=20000.0, value=float(editable["risk_auto_select_max_distance_m"]), step=50.0, help="risk_auto_select_max_distance_m：舊候選選取距離參數；最終判定以居家攔截、1000公尺既有客戶與未知出勤分類為準。")
         with risk_col2:
             risk_review_distance_m = st.number_input("覆核距離 (m)", min_value=0.0, max_value=10000.0, value=float(editable["risk_review_distance_m"]), step=50.0, help="risk_review_distance_m：最近合理候選在此距離內時，可作為覆核佐證。")
             risk_high_distance_m = st.number_input("高風險距離 (m)", min_value=0.0, max_value=20000.0, value=float(editable["risk_high_distance_m"]), step=50.0, help="risk_high_distance_m：既有客戶距離超過此值且附近有更近候選時，會提高風險。")
@@ -7327,8 +7414,8 @@ with tab_settings:
             risk_home_area_max_distance_m = st.number_input("住家區域最大距離 (m)", min_value=0.0, max_value=10000.0, value=float(editable["risk_home_area_max_distance_m"]), step=50.0, help="risk_home_area_max_distance_m：保留作為住家區域判定上限。")
         with home_col3:
             risk_min_field_visit_distance_from_home_m = st.number_input("外勤離家最小距離 (m)", min_value=0.0, max_value=10000.0, value=float(editable["risk_min_field_visit_distance_from_home_m"]), step=50.0, help="risk_min_field_visit_distance_from_home_m：離家最遠距離低於此值且缺外勤佐證時，視為路線佐證不足。")
-            risk_home_core_event_score = st.number_input("極近居家單點風險分", min_value=0, max_value=20, value=int(editable["risk_home_core_event_score"]), step=1, help="risk_home_core_event_score：單點打卡距住家 100m 內時的事件風險分，預設 0。")
-            risk_home_edge_event_score = st.number_input("邊緣居家單點風險分", min_value=0, max_value=20, value=int(editable["risk_home_edge_event_score"]), step=1, help="risk_home_edge_event_score：單點打卡距住家 101~1000m 且無既有客戶時的事件風險分，預設 0。")
+            risk_home_core_event_score = st.number_input("極近居家單點風險分", min_value=0, max_value=20, value=int(editable["risk_home_core_event_score"]), step=1, help="risk_home_core_event_score：單點打卡距住家 100公尺內時的事件風險分，預設 0。")
+            risk_home_edge_event_score = st.number_input("邊緣居家單點風險分", min_value=0, max_value=20, value=int(editable["risk_home_edge_event_score"]), step=1, help="risk_home_edge_event_score：單點打卡距住家 101~1000公尺且無既有客戶時的事件風險分，預設 0。")
 
         st.markdown("**最近醫院判定關鍵字**")
         st.caption("用於判斷哪些主檔名稱屬於醫院類型。最近醫院會從全部醫院主檔中尋找，不受前五候選限制。")

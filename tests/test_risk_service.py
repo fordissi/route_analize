@@ -89,7 +89,7 @@ def test_v3_existing_client_visit_binds_nearest_client_within_1000m() -> None:
     assert row["selected_visit_distance_m"] == 800.0
     assert row["risk_score"] == 0
     assert row["review_score"] == 0
-    assert "既有A 800m" in row["existing_client_candidates_top3"]
+    assert "既有A 800公尺" in row["existing_client_candidates_top3"]
 
 
 def test_v3_home_edge_applies_after_no_existing_client_within_1000m() -> None:
@@ -127,12 +127,47 @@ def test_v3_unknown_field_does_not_hard_select_customer_and_suggests_prospects()
     row = RiskService(make_config()).build_event_risk(raw_events, matches, pd.DataFrame(), pd.DataFrame(), employees=employees).iloc[0]
 
     assert row["location_class"] == "unknown_field"
-    assert row["selected_visit_name"] == "未知外勤點"
-    assert row["selected_visit_type"] == "未知外勤點"
+    assert row["selected_visit_name"] == "未知出勤點"
+    assert row["selected_visit_type"] == "未知出勤點"
     assert row["risk_score"] == 0
     assert row["review_score"] == 4
-    assert "潛在A 120m" in row["suggested_prospects_top3"]
+    assert "潛在A 120公尺" in row["suggested_prospects_top3"]
     assert row["nearest_existing_client_name"] == "遠既有"
+
+
+def test_v3_unknown_field_uses_nearest_non_client_candidates_as_suggested_prospects() -> None:
+    raw_events = pd.DataFrame(
+        [{"event_uid": "e1", "attendance_uid": "a1", "employee_id": "A", "gps_lat": 23.9600, "gps_lon": 121.5900}]
+    )
+    employees = pd.DataFrame([{"employee_id": "A", "home_lat": 24.7000, "home_lon": 121.7700}])
+    matches = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "candidate_rank": 1,
+                "hospital_label": "亨寧藥局",
+                "beeline_meter": 30.0,
+                "is_existing_client": 0,
+                "is_hospital_facility": 0,
+            },
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "candidate_rank": 2,
+                "hospital_label": "何裕鈞骨外科診所",
+                "beeline_meter": 84.0,
+                "is_existing_client": 0,
+                "is_hospital_facility": 0,
+            },
+        ]
+    )
+
+    row = RiskService(make_config()).build_event_risk(raw_events, matches, pd.DataFrame(), pd.DataFrame(), employees=employees).iloc[0]
+
+    assert row["location_class"] == "unknown_field"
+    assert "亨寧藥局 30公尺" in row["suggested_prospects_top3"]
+    assert "何裕鈞骨外科診所 84公尺" in row["suggested_prospects_top3"]
 
 
 def test_far_existing_client_override_becomes_unknown_field_review() -> None:
@@ -152,7 +187,7 @@ def test_far_existing_client_override_becomes_unknown_field_review() -> None:
     assert "unknown_field" in row["risk_reason_codes"]
     assert row["risk_score"] == 0
     assert row["review_score"] == 4
-    assert row["selected_visit_name"] == "未知外勤點"
+    assert row["selected_visit_name"] == "未知出勤點"
     assert row["nearest_existing_client_name"] == "existing client"
 
 

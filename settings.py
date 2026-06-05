@@ -37,7 +37,14 @@ class AppConfig:
     risk_impossible_travel_buffer_min: float = 10.0
     risk_home_radius_m: float = 500.0
     risk_home_area_max_distance_m: float = 1000.0
+    risk_home_core_event_score: int = 0
+    risk_home_edge_event_score: int = 0
     risk_min_field_visit_distance_from_home_m: float = 1000.0
+    risk_min_checkin_count: int = 2
+    risk_min_attendance_span_hours: float = 6.0
+    risk_max_attendance_span_hours: float = 14.0
+    v3_existing_client_radius_m: float = 1000.0
+    v3_unknown_prospect_radius_m: float = 500.0
     fuel_rate: float = 3.0
     maintenance_rate: float = 1.5
     break_minutes: int = 30
@@ -67,7 +74,14 @@ CONFIG_OVERRIDE_FIELDS = {
     "risk_impossible_travel_buffer_min",
     "risk_home_radius_m",
     "risk_home_area_max_distance_m",
+    "risk_home_core_event_score",
+    "risk_home_edge_event_score",
     "risk_min_field_visit_distance_from_home_m",
+    "risk_min_checkin_count",
+    "risk_min_attendance_span_hours",
+    "risk_max_attendance_span_hours",
+    "v3_existing_client_radius_m",
+    "v3_unknown_prospect_radius_m",
     "fuel_rate",
     "maintenance_rate",
     "break_minutes",
@@ -80,7 +94,14 @@ CONFIG_OVERRIDE_FIELDS = {
 
 
 def _coerce_override(field_name: str, value):
-    if field_name in {"candidate_top_n", "break_minutes", "risk_ambiguity_candidate_count"}:
+    if field_name in {
+        "candidate_top_n",
+        "break_minutes",
+        "risk_ambiguity_candidate_count",
+        "risk_min_checkin_count",
+        "risk_home_core_event_score",
+        "risk_home_edge_event_score",
+    }:
         return int(value)
     if field_name in {
         "detour_index",
@@ -99,6 +120,10 @@ def _coerce_override(field_name: str, value):
         "risk_home_radius_m",
         "risk_home_area_max_distance_m",
         "risk_min_field_visit_distance_from_home_m",
+        "risk_min_attendance_span_hours",
+        "risk_max_attendance_span_hours",
+        "v3_existing_client_radius_m",
+        "v3_unknown_prospect_radius_m",
         "fuel_rate",
         "maintenance_rate",
         "light_green_pct",

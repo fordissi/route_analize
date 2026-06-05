@@ -121,8 +121,22 @@ CREATE TABLE IF NOT EXISTS event_risk_review (
     attendance_uid TEXT,
     risk_level TEXT,
     risk_score REAL,
+    review_score REAL,
+    priority_score REAL,
+    confidence_score REAL,
     risk_reason_codes TEXT,
     risk_reason_text TEXT,
+    location_class TEXT,
+    selected_visit_name TEXT,
+    selected_visit_type TEXT,
+    selected_visit_distance_m REAL,
+    home_distance_bucket TEXT,
+    existing_client_candidates_top3 TEXT,
+    suggested_prospects_top3 TEXT,
+    nearest_existing_client_name TEXT,
+    nearest_existing_client_distance_m REAL,
+    nearest_hospital_name TEXT,
+    nearest_hospital_distance_m REAL,
     selected_distance_m REAL,
     nearest_distance_m REAL,
     distance_gap_m REAL,
@@ -137,7 +151,10 @@ CREATE TABLE IF NOT EXISTS daily_risk_summary (
     department TEXT,
     work_date TEXT,
     gps_event_count INTEGER,
+    attendance_span_minutes REAL,
     risk_score REAL,
+    review_score REAL,
+    confidence_score REAL,
     risk_priority_score REAL,
     risk_priority_rate REAL,
     risk_rate REAL,
@@ -147,6 +164,9 @@ CREATE TABLE IF NOT EXISTS daily_risk_summary (
     home_area_only_trace INTEGER,
     home_start_end_without_field_trace INTEGER,
     insufficient_route_evidence INTEGER,
+    insufficient_checkin_count INTEGER,
+    short_attendance_span INTEGER,
+    long_attendance_span INTEGER,
     home_near_event_count INTEGER,
     max_distance_from_home_m REAL,
     field_visit_count INTEGER,
@@ -161,6 +181,8 @@ CREATE TABLE IF NOT EXISTS employee_risk_summary (
     attendance_days INTEGER,
     gps_event_count INTEGER,
     risk_score REAL,
+    review_score REAL,
+    confidence_score REAL,
     risk_priority_score REAL,
     risk_priority_rate REAL,
     risk_rate REAL,
@@ -171,6 +193,9 @@ CREATE TABLE IF NOT EXISTS employee_risk_summary (
     home_area_only_days INTEGER,
     home_start_end_without_field_days INTEGER,
     insufficient_route_evidence_days INTEGER,
+    insufficient_checkin_days INTEGER,
+    short_attendance_span_days INTEGER,
+    long_attendance_span_days INTEGER,
     risk_level TEXT
 );
 
@@ -355,7 +380,30 @@ class DatabaseManager:
 
     def _migrate_risk_tables(self, conn: sqlite3.Connection) -> None:
         self._ensure_column(conn, "event_risk_review", "distance_from_home_m", "REAL")
+        self._ensure_column(conn, "event_risk_review", "review_score", "REAL")
+        self._ensure_column(conn, "event_risk_review", "priority_score", "REAL")
+        self._ensure_column(conn, "event_risk_review", "confidence_score", "REAL")
+        self._ensure_column(conn, "event_risk_review", "location_class", "TEXT")
+        self._ensure_column(conn, "event_risk_review", "selected_visit_name", "TEXT")
+        self._ensure_column(conn, "event_risk_review", "selected_visit_type", "TEXT")
+        self._ensure_column(conn, "event_risk_review", "selected_visit_distance_m", "REAL")
+        self._ensure_column(conn, "event_risk_review", "home_distance_bucket", "TEXT")
+        self._ensure_column(conn, "event_risk_review", "existing_client_candidates_top3", "TEXT")
+        self._ensure_column(conn, "event_risk_review", "suggested_prospects_top3", "TEXT")
+        self._ensure_column(conn, "event_risk_review", "nearest_existing_client_name", "TEXT")
+        self._ensure_column(conn, "event_risk_review", "nearest_existing_client_distance_m", "REAL")
+        self._ensure_column(conn, "event_risk_review", "nearest_hospital_name", "TEXT")
+        self._ensure_column(conn, "event_risk_review", "nearest_hospital_distance_m", "REAL")
         for table_name in ["daily_risk_summary", "employee_risk_summary"]:
+            self._ensure_column(conn, table_name, "review_score", "REAL")
+            self._ensure_column(conn, table_name, "confidence_score", "REAL")
             self._ensure_column(conn, table_name, "risk_priority_score", "REAL")
             self._ensure_column(conn, table_name, "risk_priority_rate", "REAL")
             self._ensure_column(conn, table_name, "low_confidence_event_count", "INTEGER")
+        self._ensure_column(conn, "daily_risk_summary", "attendance_span_minutes", "REAL")
+        self._ensure_column(conn, "daily_risk_summary", "insufficient_checkin_count", "INTEGER")
+        self._ensure_column(conn, "daily_risk_summary", "short_attendance_span", "INTEGER")
+        self._ensure_column(conn, "daily_risk_summary", "long_attendance_span", "INTEGER")
+        self._ensure_column(conn, "employee_risk_summary", "insufficient_checkin_days", "INTEGER")
+        self._ensure_column(conn, "employee_risk_summary", "short_attendance_span_days", "INTEGER")
+        self._ensure_column(conn, "employee_risk_summary", "long_attendance_span_days", "INTEGER")

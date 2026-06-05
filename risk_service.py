@@ -9,7 +9,7 @@ from matcher import haversine_meter
 
 
 REASON_WEIGHTS = {
-    "near_home_checkin": 6,
+    "near_home_checkin": 3,
     "far_customer_override": 5,
     "selected_not_top5": 3,
     "selected_distance_too_far": 4,
@@ -17,19 +17,33 @@ REASON_WEIGHTS = {
     "no_reasonable_candidate": 3,
     "impossible_travel_time": 8,
     "high_finance_variance": 5,
-    "home_area_only_trace": 6,
-    "home_start_end_without_field_trace": 4,
+    "home_area_only_trace": 8,
+    "home_start_end_without_field_trace": 3,
     "insufficient_route_evidence": 3,
+    "insufficient_checkin_count": 5,
+    "short_attendance_span": 4,
+    "long_attendance_span": 3,
+}
+
+CONFIDENCE_REASON_CODES = {
+    "far_customer_override",
+    "selected_not_top5",
+    "nearby_candidate_conflict",
+    "no_reasonable_candidate",
+    "insufficient_route_evidence",
+    "long_attendance_span",
 }
 
 DAILY_PRIORITY_WEIGHTS = {
-    "near_home_checkin": 10,
+    "near_home_checkin": 3,
     "impossible_travel_time": 16,
     "far_customer_override": 12,
     "selected_distance_too_far": 10,
-    "home_area_only_trace": 18,
-    "home_start_end_without_field_trace": 14,
+    "home_area_only_trace": 24,
+    "home_start_end_without_field_trace": 6,
     "insufficient_route_evidence": 8,
+    "insufficient_checkin_count": 12,
+    "short_attendance_span": 10,
     "high_finance_variance": 6,
     "no_reasonable_candidate": 3,
     "selected_not_top5": 3,
@@ -42,6 +56,11 @@ DAILY_PRIORITY_CAPS = {
     "no_reasonable_candidate": 2,
 }
 
+HOME_CORE_LABEL = "極近居家點"
+HOME_EDGE_LABEL = "邊緣居家點"
+EXISTING_CLIENT_LABEL = "既有客戶拜訪點"
+UNKNOWN_FIELD_LABEL = "未知外勤點"
+
 NORMAL_LABEL = "正常"
 LOW_CONFIDENCE_LABEL = "低信心"
 REVIEW_LABEL = "需覆核"
@@ -52,8 +71,22 @@ EVENT_RISK_COLUMNS = [
     "attendance_uid",
     "risk_level",
     "risk_score",
+    "review_score",
+    "priority_score",
+    "confidence_score",
     "risk_reason_codes",
     "risk_reason_text",
+    "location_class",
+    "selected_visit_name",
+    "selected_visit_type",
+    "selected_visit_distance_m",
+    "home_distance_bucket",
+    "existing_client_candidates_top3",
+    "suggested_prospects_top3",
+    "nearest_existing_client_name",
+    "nearest_existing_client_distance_m",
+    "nearest_hospital_name",
+    "nearest_hospital_distance_m",
     "selected_distance_m",
     "nearest_distance_m",
     "distance_gap_m",
@@ -68,7 +101,10 @@ DAILY_RISK_COLUMNS = [
     "department",
     "work_date",
     "gps_event_count",
+    "attendance_span_minutes",
     "risk_score",
+    "review_score",
+    "confidence_score",
     "risk_priority_score",
     "risk_priority_rate",
     "risk_rate",
@@ -79,6 +115,9 @@ DAILY_RISK_COLUMNS = [
     "home_area_only_trace",
     "home_start_end_without_field_trace",
     "insufficient_route_evidence",
+    "insufficient_checkin_count",
+    "short_attendance_span",
+    "long_attendance_span",
     "home_near_event_count",
     "max_distance_from_home_m",
     "field_visit_count",
@@ -92,6 +131,8 @@ EMPLOYEE_RISK_COLUMNS = [
     "attendance_days",
     "gps_event_count",
     "risk_score",
+    "review_score",
+    "confidence_score",
     "risk_priority_score",
     "risk_priority_rate",
     "risk_rate",
@@ -102,6 +143,9 @@ EMPLOYEE_RISK_COLUMNS = [
     "home_area_only_days",
     "home_start_end_without_field_days",
     "insufficient_route_evidence_days",
+    "insufficient_checkin_days",
+    "short_attendance_span_days",
+    "long_attendance_span_days",
     "risk_level",
 ]
 
@@ -155,6 +199,7 @@ class RiskService:
         if "gps_event_count" not in result.columns:
             result["gps_event_count"] = 0
         result["gps_event_count"] = pd.to_numeric(result["gps_event_count"], errors="coerce").fillna(0)
+        result = self._attach_attendance_rule_risk(result)
 
         risk = event_risk.copy()
         if risk.empty or "attendance_uid" not in risk.columns:
@@ -162,6 +207,8 @@ class RiskService:
                 columns=[
                     "attendance_uid",
                     "risk_score",
+                    "review_score",
+                    "confidence_score",
                     "risk_priority_score",
                     "review_event_count",
                     "high_risk_event_count",
@@ -172,11 +219,24 @@ class RiskService:
         else:
             if "risk_score" not in risk.columns:
                 risk["risk_score"] = 0
+            if "review_score" not in risk.columns:
+                risk["review_score"] = 0
+            if "priority_score" not in risk.columns:
+                risk["priority_score"] = pd.to_numeric(risk["risk_score"], errors="coerce").fillna(0) * 3 + pd.to_numeric(
+                    risk["review_score"], errors="coerce"
+                ).fillna(0)
+            if "confidence_score" not in risk.columns:
+                risk["confidence_score"] = risk.get("risk_reason_codes", pd.Series("", index=risk.index)).apply(
+                    self._confidence_score_from_codes
+                )
             if "risk_level" not in risk.columns:
                 risk["risk_level"] = ""
             if "risk_reason_codes" not in risk.columns:
                 risk["risk_reason_codes"] = ""
             risk["risk_score"] = pd.to_numeric(risk["risk_score"], errors="coerce").fillna(0)
+            risk["review_score"] = pd.to_numeric(risk["review_score"], errors="coerce").fillna(0)
+            risk["priority_score"] = pd.to_numeric(risk["priority_score"], errors="coerce").fillna(0)
+            risk["confidence_score"] = pd.to_numeric(risk["confidence_score"], errors="coerce").fillna(0)
             risk["review_event"] = risk["risk_level"].isin(self._review_levels())
             risk["high_risk_event"] = risk["risk_level"].isin(self._high_risk_levels())
             risk["low_confidence_event"] = risk["risk_level"].eq(LOW_CONFIDENCE_LABEL)
@@ -184,7 +244,9 @@ class RiskService:
                 risk.groupby("attendance_uid", dropna=False)
                 .agg(
                     risk_score=("risk_score", "sum"),
-                    risk_priority_score=("risk_reason_codes", self._daily_event_priority_score),
+                    review_score=("review_score", "sum"),
+                    confidence_score=("confidence_score", "sum"),
+                    risk_priority_score=("priority_score", "sum"),
                     review_event_count=("review_event", "sum"),
                     high_risk_event_count=("high_risk_event", "sum"),
                     low_confidence_event_count=("low_confidence_event", "sum"),
@@ -194,7 +256,15 @@ class RiskService:
             )
 
         result = result.merge(grouped, on="attendance_uid", how="left")
-        for column in ["risk_score", "risk_priority_score", "review_event_count", "high_risk_event_count", "low_confidence_event_count"]:
+        for column in [
+            "risk_score",
+            "review_score",
+            "confidence_score",
+            "risk_priority_score",
+            "review_event_count",
+            "high_risk_event_count",
+            "low_confidence_event_count",
+        ]:
             result[column] = pd.to_numeric(result[column], errors="coerce").fillna(0)
         result["review_event_count"] = result["review_event_count"].astype(int)
         result["high_risk_event_count"] = result["high_risk_event_count"].astype(int)
@@ -207,6 +277,9 @@ class RiskService:
             "home_area_only_trace",
             "home_start_end_without_field_trace",
             "insufficient_route_evidence",
+            "insufficient_checkin_count",
+            "short_attendance_span",
+            "long_attendance_span",
             "home_near_event_count",
             "field_visit_count",
         ]:
@@ -216,13 +289,19 @@ class RiskService:
         result["risk_score"] = result["risk_score"] + (
             result["home_area_only_trace"] * REASON_WEIGHTS["home_area_only_trace"]
             + result["home_start_end_without_field_trace"] * REASON_WEIGHTS["home_start_end_without_field_trace"]
-            + result["insufficient_route_evidence"] * REASON_WEIGHTS["insufficient_route_evidence"]
+            + pd.to_numeric(result.get("insufficient_checkin_risk_score", 0), errors="coerce").fillna(0)
+            + result["short_attendance_span"] * REASON_WEIGHTS["short_attendance_span"]
         )
-        result["risk_priority_score"] = result["risk_priority_score"] + (
-            result["home_area_only_trace"] * DAILY_PRIORITY_WEIGHTS["home_area_only_trace"]
-            + result["home_start_end_without_field_trace"] * DAILY_PRIORITY_WEIGHTS["home_start_end_without_field_trace"]
-            + result["insufficient_route_evidence"] * DAILY_PRIORITY_WEIGHTS["insufficient_route_evidence"]
+        result["review_score"] = result["review_score"] + (
+            pd.to_numeric(result.get("insufficient_checkin_review_score", 0), errors="coerce").fillna(0)
+            + result["short_attendance_span"] * 5
+            + result["long_attendance_span"] * 5
         )
+        result["confidence_score"] = result["confidence_score"] + (
+            result["insufficient_route_evidence"] * REASON_WEIGHTS["insufficient_route_evidence"]
+            + result["long_attendance_span"] * REASON_WEIGHTS["long_attendance_span"]
+        )
+        result["risk_priority_score"] = (result["risk_score"] * 3) + result["review_score"]
         result["risk_reason_summary"] = result.apply(self._merge_daily_reason_summary, axis=1)
         result["risk_priority_rate"] = result["risk_priority_score"] / result["gps_event_count"].clip(lower=1)
         result["risk_rate"] = result["risk_score"] / result["gps_event_count"].clip(lower=1)
@@ -237,6 +316,8 @@ class RiskService:
         for column in [
             "gps_event_count",
             "risk_score",
+            "review_score",
+            "confidence_score",
             "risk_priority_score",
             "review_event_count",
             "high_risk_event_count",
@@ -244,6 +325,9 @@ class RiskService:
             "home_area_only_trace",
             "home_start_end_without_field_trace",
             "insufficient_route_evidence",
+            "insufficient_checkin_count",
+            "short_attendance_span",
+            "long_attendance_span",
         ]:
             if column not in daily.columns:
                 daily[column] = 0
@@ -258,6 +342,8 @@ class RiskService:
                 attendance_days=("attendance_uid", "count"),
                 gps_event_count=("gps_event_count", "sum"),
                 risk_score=("risk_score", "sum"),
+                review_score=("review_score", "sum"),
+                confidence_score=("confidence_score", "sum"),
                 risk_priority_score=("risk_priority_score", "sum"),
                 review_event_count=("review_event_count", "sum"),
                 high_risk_event_count=("high_risk_event_count", "sum"),
@@ -265,6 +351,9 @@ class RiskService:
                 home_area_only_days=("home_area_only_trace", "sum"),
                 home_start_end_without_field_days=("home_start_end_without_field_trace", "sum"),
                 insufficient_route_evidence_days=("insufficient_route_evidence", "sum"),
+                insufficient_checkin_days=("insufficient_checkin_count", "sum"),
+                short_attendance_span_days=("short_attendance_span", "sum"),
+                long_attendance_span_days=("long_attendance_span", "sum"),
             )
             .reset_index()
         )
@@ -275,6 +364,42 @@ class RiskService:
         return grouped.reindex(columns=EMPLOYEE_RISK_COLUMNS).sort_values(
             ["risk_priority_rate", "risk_priority_score", "risk_rate"], ascending=[False, False, False]
         )
+
+    def _attach_attendance_rule_risk(self, attendance: pd.DataFrame) -> pd.DataFrame:
+        result = attendance.copy()
+        index = result.index
+        event_count = (
+            pd.to_numeric(result["event_count"], errors="coerce")
+            if "event_count" in result.columns
+            else pd.Series(pd.NA, index=index, dtype="Float64")
+        )
+        first_actual = (
+            pd.to_datetime(result["first_actual_time"], errors="coerce")
+            if "first_actual_time" in result.columns
+            else pd.Series(pd.NaT, index=index)
+        )
+        last_actual = (
+            pd.to_datetime(result["last_actual_time"], errors="coerce")
+            if "last_actual_time" in result.columns
+            else pd.Series(pd.NaT, index=index)
+        )
+        span_minutes = (last_actual - first_actual).dt.total_seconds().div(60)
+        valid_span = span_minutes.notna() & span_minutes.ge(0)
+        min_count = int(getattr(self.config, "risk_min_checkin_count", 2))
+        min_span_minutes = float(getattr(self.config, "risk_min_attendance_span_hours", 6.0)) * 60
+        max_span_minutes = float(getattr(self.config, "risk_max_attendance_span_hours", 14.0)) * 60
+        sufficient_count = event_count.ge(min_count).fillna(False)
+
+        result["attendance_span_minutes"] = span_minutes.where(valid_span, 0).fillna(0).round(0)
+        missing_count = event_count.notna() & event_count.lt(min_count)
+        zero_count = missing_count & event_count.eq(0)
+        one_count = missing_count & event_count.eq(1)
+        result["insufficient_checkin_count"] = missing_count.astype(int)
+        result["insufficient_checkin_risk_score"] = (zero_count.astype(int) * 10) + (one_count.astype(int) * 5)
+        result["insufficient_checkin_review_score"] = (zero_count.astype(int) * 10) + (one_count.astype(int) * 12)
+        result["short_attendance_span"] = (valid_span & sufficient_count & span_minutes.lt(min_span_minutes)).astype(int)
+        result["long_attendance_span"] = (valid_span & sufficient_count & span_minutes.gt(max_span_minutes)).astype(int)
+        return result
 
     def _build_home_trace_risk(
         self,
@@ -370,7 +495,7 @@ class RiskService:
         ).astype(int)
         grouped["home_start_end_without_field_trace"] = (
             (grouped["home_area_only_trace"] == 0)
-            & (grouped["gps_points"] >= 2)
+            & (grouped["gps_points"] > 2)
             & grouped["first_near_home"]
             & grouped["last_near_home"]
             & (grouped["field_visit_count"] == 0)
@@ -400,9 +525,21 @@ class RiskService:
                 reason_counts[code] = reason_counts.get(code, 0) + 1
         score = 0.0
         for code, count in reason_counts.items():
+            if code in CONFIDENCE_REASON_CODES:
+                continue
             capped_count = min(count, DAILY_PRIORITY_CAPS.get(code, count))
             score += DAILY_PRIORITY_WEIGHTS.get(code, REASON_WEIGHTS.get(code, 0)) * capped_count
         return score
+
+    @staticmethod
+    def _confidence_score_from_codes(value: Any) -> float:
+        return float(
+            sum(
+                REASON_WEIGHTS.get(code, 0)
+                for code in str(value or "").split(",")
+                if code in CONFIDENCE_REASON_CODES
+            )
+        )
 
     def _merge_daily_reason_summary(self, row: pd.Series) -> str:
         reasons = set(str(row.get("risk_reason_summary", "") or "").split(",")) - {""}
@@ -412,6 +549,12 @@ class RiskService:
             reasons.add("home_start_end_without_field_trace")
         if row.get("insufficient_route_evidence", 0):
             reasons.add("insufficient_route_evidence")
+        if row.get("insufficient_checkin_count", 0):
+            reasons.add("insufficient_checkin_count")
+        if row.get("short_attendance_span", 0):
+            reasons.add("short_attendance_span")
+        if row.get("long_attendance_span", 0):
+            reasons.add("long_attendance_span")
         return ",".join(sorted(reasons))
 
     def _attach_home_distance(self, events: pd.DataFrame, employees: pd.DataFrame | None) -> pd.DataFrame:
@@ -448,11 +591,13 @@ class RiskService:
 
     def _daily_level(self, row: pd.Series) -> str:
         priority = float(row.get("risk_priority_score", 0) or 0)
-        if row["high_risk_event_count"] > 0 or priority >= 20:
+        if row["high_risk_event_count"] > 0 or row.get("home_area_only_trace", 0) or priority >= 20:
             return HIGH_RISK_LABEL
         if row["review_event_count"] > 0 or row.get("home_start_end_without_field_trace", 0) or priority >= 8:
             return REVIEW_LABEL
         if row["risk_score"] > 0 or priority > 0:
+            return REVIEW_LABEL
+        if row.get("confidence_score", 0) > 0 or row["low_confidence_event_count"] > 0:
             return LOW_CONFIDENCE_LABEL
         return NORMAL_LABEL
 
@@ -463,6 +608,8 @@ class RiskService:
         if row["review_event_count"] > 0 or row["home_start_end_without_field_days"] > 0 or priority_rate >= 6:
             return REVIEW_LABEL
         if row["risk_score"] > 0 or row.get("risk_priority_score", 0) > 0:
+            return REVIEW_LABEL
+        if row.get("confidence_score", 0) > 0 or row.get("low_confidence_event_count", 0) > 0:
             return LOW_CONFIDENCE_LABEL
         return NORMAL_LABEL
 
@@ -484,75 +631,88 @@ class RiskService:
         event_uid = event.get("event_uid")
         attendance_uid = event.get("attendance_uid")
         impossible_event_ids = impossible_event_ids or set()
-
-        selected_distance = None
-        nearest_distance = None
-        distance_gap = None
-        selected_rank = None
-        selected_name = None
-        nearest_name = None
         distance_from_home = self._optional_float(event.get("distance_from_home_m"))
 
-        if distance_from_home is not None and distance_from_home <= float(self.config.risk_home_radius_m):
+        candidates = self._prepare_candidates(candidates)
+        nearest = candidates.iloc[0] if not candidates.empty else None
+        nearest_distance = float(nearest["beeline_meter"]) if nearest is not None else None
+        nearest_name = self._candidate_name(nearest) if nearest is not None else None
+
+        existing_clients = self._existing_client_candidates(candidates)
+        nearest_existing = existing_clients.iloc[0] if not existing_clients.empty else None
+        nearest_existing_distance = float(nearest_existing["beeline_meter"]) if nearest_existing is not None else None
+        nearest_existing_name = self._candidate_name(nearest_existing) if nearest_existing is not None else None
+        existing_top3 = self._format_candidate_summary(existing_clients.head(3))
+
+        hospitals = self._hospital_candidates(candidates)
+        nearest_hospital = hospitals.iloc[0] if not hospitals.empty else None
+        nearest_hospital_distance = float(nearest_hospital["beeline_meter"]) if nearest_hospital is not None else None
+        nearest_hospital_name = self._candidate_name(nearest_hospital) if nearest_hospital is not None else None
+
+        suggested_prospects = self._prospect_candidates(candidates)
+        suggested_top3 = self._format_candidate_summary(suggested_prospects.head(3))
+
+        home_bucket = self._home_distance_bucket(distance_from_home)
+        selected_rank = None
+        selected_name: str | None = None
+        selected_type: str | None = None
+        selected_distance: float | None = None
+        location_class: str
+        risk_score = 0
+        review_score = 0
+
+        if distance_from_home is not None and distance_from_home <= 100:
+            location_class = "home_core"
+            selected_name = HOME_CORE_LABEL
+            selected_type = HOME_CORE_LABEL
+            selected_distance = distance_from_home
+            risk_score = int(getattr(self.config, "risk_home_core_event_score", 0))
             reason_codes.append("near_home_checkin")
-
-        if candidates.empty:
-            reason_codes.append("no_reasonable_candidate")
+        elif (
+            nearest_existing is not None
+            and nearest_existing_distance is not None
+            and nearest_existing_distance <= float(getattr(self.config, "v3_existing_client_radius_m", 1000.0))
+        ):
+            location_class = "existing_client_visit"
+            selected_name = nearest_existing_name
+            selected_type = EXISTING_CLIENT_LABEL
+            selected_distance = nearest_existing_distance
+            selected_rank = self._optional_int(nearest_existing.get("candidate_rank"))
+        elif distance_from_home is not None and distance_from_home <= 1000:
+            location_class = "home_edge"
+            selected_name = HOME_EDGE_LABEL
+            selected_type = HOME_EDGE_LABEL
+            selected_distance = distance_from_home
+            risk_score = int(getattr(self.config, "risk_home_edge_event_score", 0))
+            reason_codes.append("near_home_checkin")
         else:
-            candidates = candidates.copy()
-            candidates["beeline_meter"] = pd.to_numeric(candidates.get("beeline_meter"), errors="coerce")
-            candidates["candidate_rank"] = pd.to_numeric(candidates.get("candidate_rank"), errors="coerce")
-            candidates = candidates.dropna(subset=["beeline_meter"])
-
-            if candidates.empty:
-                reason_codes.append("no_reasonable_candidate")
-            else:
-                nearest = candidates.sort_values(["beeline_meter", "candidate_rank"], na_position="last").iloc[0]
-                nearest_distance = float(nearest["beeline_meter"])
-                nearest_name = nearest.get("hospital_label")
-                if nearest_distance > float(self.config.risk_auto_select_max_distance_m):
-                    reason_codes.append("no_reasonable_candidate")
-
-                if "is_selected" in candidates.columns:
-                    selected_rows = candidates[self._as_bool_series(candidates["is_selected"])]
-                else:
-                    selected_rows = candidates.iloc[0:0]
-                if not selected_rows.empty:
-                    selected = selected_rows.sort_values(["candidate_rank", "beeline_meter"], na_position="last").iloc[0]
-                    selected_distance = float(selected["beeline_meter"])
-                    selected_rank = self._optional_int(selected.get("candidate_rank"))
-                    selected_name = selected.get("hospital_label")
-                    distance_gap = selected_distance - nearest_distance
-
-                    if selected_rank is not None and selected_rank > 5:
-                        reason_codes.append("selected_not_top5")
-                    if selected_distance > float(self.config.risk_auto_select_max_distance_m):
-                        reason_codes.append("selected_distance_too_far")
-                    if (
-                        self._as_bool(selected.get("is_existing_client"))
-                        and selected_distance > float(self.config.risk_high_distance_m)
-                        and nearest_distance <= float(self.config.risk_review_distance_m)
-                        and distance_gap >= float(self.config.risk_customer_override_gap_m)
-                    ):
-                        reason_codes.append("far_customer_override")
-
-                close_candidates = candidates[
-                    candidates["beeline_meter"] <= nearest_distance + float(self.config.risk_ambiguity_distance_m)
-                ]
-                if len(close_candidates) >= int(self.config.risk_ambiguity_candidate_count):
-                    reason_codes.append("nearby_candidate_conflict")
+            location_class = "unknown_field"
+            selected_name = UNKNOWN_FIELD_LABEL
+            selected_type = UNKNOWN_FIELD_LABEL
+            review_score = 4
+            reason_codes.append("unknown_field")
 
         if event_uid in impossible_event_ids:
             reason_codes.append("impossible_travel_time")
+            risk_score += REASON_WEIGHTS["impossible_travel_time"]
 
         reason_codes = list(dict.fromkeys(reason_codes))
-        risk_score = sum(REASON_WEIGHTS[code] for code in reason_codes)
+        confidence_score = review_score + sum(REASON_WEIGHTS.get(code, 0) for code in reason_codes if code in CONFIDENCE_REASON_CODES)
+        priority_score = risk_score * 3 + review_score
+        distance_gap = (
+            selected_distance - nearest_distance
+            if selected_distance is not None and nearest_distance is not None
+            else None
+        )
 
         return {
             "event_uid": event_uid,
             "attendance_uid": attendance_uid,
-            "risk_level": self._risk_level(risk_score, reason_codes),
+            "risk_level": self._risk_level(risk_score, review_score, reason_codes),
             "risk_score": risk_score,
+            "review_score": review_score,
+            "priority_score": priority_score,
+            "confidence_score": confidence_score,
             "risk_reason_codes": ",".join(reason_codes),
             "risk_reason_text": self._reason_text(
                 reason_codes,
@@ -563,6 +723,17 @@ class RiskService:
                 nearest_distance,
                 distance_from_home,
             ),
+            "location_class": location_class,
+            "selected_visit_name": selected_name,
+            "selected_visit_type": selected_type,
+            "selected_visit_distance_m": selected_distance,
+            "home_distance_bucket": home_bucket,
+            "existing_client_candidates_top3": existing_top3,
+            "suggested_prospects_top3": suggested_top3,
+            "nearest_existing_client_name": nearest_existing_name,
+            "nearest_existing_client_distance_m": nearest_existing_distance,
+            "nearest_hospital_name": nearest_hospital_name,
+            "nearest_hospital_distance_m": nearest_hospital_distance,
             "selected_distance_m": selected_distance,
             "nearest_distance_m": nearest_distance,
             "distance_gap_m": distance_gap,
@@ -570,17 +741,117 @@ class RiskService:
             "distance_from_home_m": distance_from_home,
         }
 
-    def _risk_level(self, score: int, reason_codes: list[str]) -> str:
+    def _prepare_candidates(self, candidates: pd.DataFrame) -> pd.DataFrame:
+        if candidates.empty:
+            return pd.DataFrame()
+        result = candidates.copy()
+        result["beeline_meter"] = pd.to_numeric(result.get("beeline_meter"), errors="coerce")
+        result["candidate_rank"] = pd.to_numeric(result.get("candidate_rank"), errors="coerce")
+        return result.dropna(subset=["beeline_meter"]).sort_values(
+            ["beeline_meter", "candidate_rank"], na_position="last"
+        )
+
+    def _existing_client_candidates(self, candidates: pd.DataFrame) -> pd.DataFrame:
+        if candidates.empty or "is_existing_client" not in candidates.columns:
+            return candidates.iloc[0:0]
+        return candidates.loc[self._as_bool_series(candidates["is_existing_client"])].sort_values(
+            ["beeline_meter", "candidate_rank"], na_position="last"
+        )
+
+    def _hospital_candidates(self, candidates: pd.DataFrame) -> pd.DataFrame:
+        if candidates.empty:
+            return candidates
+        if "is_hospital_facility" not in candidates.columns:
+            return candidates.sort_values(["beeline_meter", "candidate_rank"], na_position="last")
+        return candidates.loc[self._as_bool_series(candidates["is_hospital_facility"])].sort_values(
+            ["beeline_meter", "candidate_rank"], na_position="last"
+        )
+
+    def _prospect_candidates(self, candidates: pd.DataFrame) -> pd.DataFrame:
+        if candidates.empty:
+            return candidates
+        prospects = candidates
+        if "is_existing_client" in prospects.columns:
+            prospects = prospects.loc[~self._as_bool_series(prospects["is_existing_client"])]
+        if "is_hospital_facility" in prospects.columns:
+            prospects = prospects.loc[self._as_bool_series(prospects["is_hospital_facility"])]
+        prospects = prospects.loc[
+            prospects["beeline_meter"] <= float(getattr(self.config, "v3_unknown_prospect_radius_m", 500.0))
+        ]
+        return prospects.sort_values(["beeline_meter", "candidate_rank"], na_position="last")
+
+    @staticmethod
+    def _candidate_name(candidate: pd.Series | None) -> str | None:
+        if candidate is None:
+            return None
+        for column in ["hospital_label", "hospital_name", "client_name", "hospital_id"]:
+            value = candidate.get(column)
+            if pd.notna(value) and str(value).strip():
+                return str(value).strip()
+        return None
+
+    @classmethod
+    def _format_candidate_summary(cls, candidates: pd.DataFrame) -> str:
+        if candidates.empty:
+            return ""
+        parts = []
+        for _, candidate in candidates.iterrows():
+            name = cls._candidate_name(candidate) or "未知院所"
+            distance = pd.to_numeric(pd.Series([candidate.get("beeline_meter")]), errors="coerce").iloc[0]
+            if pd.isna(distance):
+                parts.append(name)
+            else:
+                parts.append(f"{name} {float(distance):.0f}m")
+        return "；".join(parts)
+
+    @staticmethod
+    def _home_distance_bucket(distance_from_home: float | None) -> str:
+        if distance_from_home is None:
+            return ""
+        if distance_from_home <= 100:
+            return "100公尺內"
+        if distance_from_home <= 500:
+            return "101~500公尺內"
+        if distance_from_home <= 1000:
+            return "501~1000公尺內"
+        return f"{distance_from_home:.0f}m"
+
+    def _risk_level(self, score: int, confidence_score: int, reason_codes: list[str]) -> str:
         reasons = set(reason_codes)
         if "impossible_travel_time" in reasons:
             return HIGH_RISK_LABEL
         if score >= 10:
             return HIGH_RISK_LABEL
-        if "far_customer_override" in reasons or "selected_distance_too_far" in reasons:
+        if "selected_distance_too_far" in reasons:
             return REVIEW_LABEL
         if score > 0:
-            return LOW_CONFIDENCE_LABEL
+            return REVIEW_LABEL
+        if confidence_score > 0:
+            return REVIEW_LABEL
         return NORMAL_LABEL
+
+    def _risk_score_from_codes(self, reason_codes: list[str], distance_from_home: float | None) -> int:
+        score = 0
+        for code in reason_codes:
+            if code in CONFIDENCE_REASON_CODES:
+                continue
+            if code == "near_home_checkin":
+                score += self._near_home_risk_score(distance_from_home)
+            else:
+                score += REASON_WEIGHTS[code]
+        return score
+
+    @staticmethod
+    def _near_home_risk_score(distance_from_home: float | None) -> int:
+        if distance_from_home is None:
+            return 0
+        if distance_from_home <= 100:
+            return 3
+        if distance_from_home <= 500:
+            return 2
+        if distance_from_home <= 1000:
+            return 1
+        return 0
 
     def _reason_text(
         self,
@@ -592,6 +863,29 @@ class RiskService:
         nearest_distance: float | None,
         distance_from_home: float | None,
     ) -> str:
+        translated: list[str] = []
+        if "far_customer_override" in reason_codes:
+            translated.append(
+                "系統為既有客戶選到較遠點，旁邊有更近候選；"
+                f"選定 {selected_name or '未知既有客戶'} {self._format_distance(selected_distance)}，"
+                f"最近候選 {nearest_name or '未知候選'} {self._format_distance(nearest_distance)}"
+            )
+        if "near_home_checkin" in reason_codes:
+            translated.append(f"打卡點距離住家 {self._format_distance(distance_from_home)}，可能是在家附近打卡")
+        if "selected_not_top5" in reason_codes:
+            translated.append(f"選定候選排名第 {selected_rank}，不在最近前 5 名")
+        if "selected_distance_too_far" in reason_codes:
+            translated.append(f"選定點距離 {self._format_distance(selected_distance)}，超過自動選取門檻")
+        if "nearby_candidate_conflict" in reason_codes:
+            translated.append("附近候選院所過於密集，單點判定信心較低")
+        if "no_reasonable_candidate" in reason_codes:
+            translated.append("GPS 點附近沒有合理候選院所")
+        if "unknown_field" in reason_codes:
+            translated.append("1000m 內沒有既有客戶，判定為未知外勤點，需主管依日報或備註覆核")
+        if "impossible_travel_time" in reason_codes:
+            translated.append("相鄰打卡點移動時間不合理")
+        return "；".join(translated)
+
         text: list[str] = []
         if "far_customer_override" in reason_codes:
             text.append(

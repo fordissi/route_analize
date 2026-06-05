@@ -8,14 +8,17 @@ import pandas as pd
 RISK_REASON_LABELS = {
     "near_home_checkin": "可能在家附近打卡",
     "far_customer_override": "系統選到較遠的既有客戶，但附近有更近的候選院所",
-    "selected_not_top5": "系統選定院所不在距離最近的前 5 名候選內",
-    "selected_distance_too_far": "系統選定院所距離過遠，超過自動選取門檻",
+    "selected_not_top5": "舊候選標記不在距離最近的前 5 名候選內",
+    "selected_distance_too_far": "舊候選標記距離過遠，超過自動選取門檻",
     "nearby_candidate_conflict": "附近候選院所過於密集，單點判定信心較低",
     "no_reasonable_candidate": "GPS 點附近沒有合理候選院所",
     "impossible_travel_time": "相鄰打卡點的移動時間不合理",
     "home_area_only_trace": "當日軌跡主要停留在住家附近，缺少足夠外勤佐證",
     "home_start_end_without_field_trace": "路線從住家附近起訖，但缺少明確外勤拜訪軌跡",
     "insufficient_route_evidence": "GPS 點數、路線或候選匹配不足，無法形成可檢查的外勤路徑",
+    "insufficient_checkin_count": "打卡次數不足",
+    "short_attendance_span": "出勤時數過短",
+    "long_attendance_span": "出勤時數過長，可能需確認忘刷或超時原因",
 }
 
 
@@ -33,6 +36,12 @@ def _date_text(value: Any) -> str:
         return str(value)
 
 
+def _text(value: Any, default: str = "") -> str:
+    if pd.isna(value):
+        return default
+    return str(value)
+
+
 def _first_existing(row: pd.Series, names: list[str], default: Any = 0) -> Any:
     for name in names:
         if name in row:
@@ -41,7 +50,7 @@ def _first_existing(row: pd.Series, names: list[str], default: Any = 0) -> Any:
 
 
 def translate_risk_reason_codes(value: Any) -> str:
-    text = str(value or "").strip()
+    text = _text(value).strip()
     if not text:
         return ""
     parts = [part.strip() for part in text.replace("；", ",").replace(";", ",").split(",") if part.strip()]
@@ -309,7 +318,7 @@ def daily_primary_risk_reason(row: pd.Series) -> str:
         return "需覆核打卡點"
     if _num(row.get("insufficient_route_evidence")) > 0:
         return "外勤佐證不足"
-    reason = str(row.get("risk_reason_summary", row.get("風險原因摘要", "")) or "").strip()
+    reason = _text(row.get("risk_reason_summary", row.get("風險原因摘要", ""))).strip()
     return translate_risk_reason_codes(reason) if reason else "未見明顯風險"
 
 
@@ -326,6 +335,12 @@ def overview_primary_risk_reason(row: pd.Series) -> str:
 
 
 def risk_priority(row: pd.Series) -> float:
+    event_priority = row.get("priority_score")
+    if pd.notna(event_priority):
+        return _num(event_priority)
+    review_points = _num(row.get("review_score"), default=0)
+    if review_points > 0 and "risk_priority_score" not in row:
+        return _num(row.get("risk_score"), default=0) * 3 + review_points
     score = _num(_first_existing(row, ["risk_priority_score", "風險優先分", "risk_score", "風險分數"]))
     high = _num(_first_existing(row, ["high_risk_event_count", "高風險點數"]))
     review = _num(_first_existing(row, ["review_event_count", "需覆核點數"]))
@@ -358,7 +373,7 @@ def add_overview_risk_drilldown_columns(dataframe: pd.DataFrame) -> pd.DataFrame
     result["主要風險原因"] = result.apply(overview_primary_risk_reason, axis=1)
     result["risk_priority"] = result.apply(risk_priority, axis=1)
     result["追查提示"] = result.apply(
-        lambda row: f"優先查看 {str(row.get('employee_label', row.get('業務', '該業務')))}的個人報表"
+        lambda row: f"優先查看 {_text(row.get('employee_label', row.get('業務', '該業務')), '該業務')}的個人報表"
         if risk_priority(row) > 0
         else "可先略過",
         axis=1,
@@ -367,11 +382,20 @@ def add_overview_risk_drilldown_columns(dataframe: pd.DataFrame) -> pd.DataFrame
 
 
 def event_risk_focus(row: pd.Series) -> str:
+    location_class = _text(row.get("location_class")).strip()
+    if location_class == "home_core":
+        return "居家風險：極近居家點"
+    if location_class == "home_edge":
+        return "居家風險：邊緣居家點"
+    if location_class == "existing_client_visit":
+        return "既有客戶拜訪"
+    if location_class == "unknown_field":
+        return "未知外勤點判定"
     selected_distance = _num(row.get("selected_distance_m"), default=float("nan"))
     distance_gap = _num(row.get("distance_gap_m"), default=0)
     rank = _num(row.get("selected_rank"), default=0)
-    reason_codes = str(row.get("risk_reason_codes", "") or "")
-    reason = str(row.get("risk_reason_text", "") or "")
+    reason_codes = _text(row.get("risk_reason_codes"))
+    reason = _text(row.get("risk_reason_text"))
     if "near_home_checkin" in reason_codes or "住家" in reason:
         return "可能在家附近打卡"
     if pd.notna(selected_distance) and selected_distance >= 1500:
@@ -389,6 +413,31 @@ def event_risk_focus(row: pd.Series) -> str:
 
 def event_evidence_summary(row: pd.Series) -> str:
     parts: list[str] = []
+    home_bucket = _text(row.get("home_distance_bucket")).strip()
+    if home_bucket:
+        parts.append(f"距離住家：{home_bucket}")
+    selected_visit_name = _text(row.get("selected_visit_name")).strip()
+    selected_visit_type = _text(row.get("selected_visit_type")).strip()
+    selected_visit_distance = _num(row.get("selected_visit_distance_m"), default=float("nan"))
+    if selected_visit_name:
+        distance_text = f" {selected_visit_distance:.0f}m" if pd.notna(selected_visit_distance) else ""
+        parts.append(f"v3系統判定：{selected_visit_name}{distance_text} ({selected_visit_type})")
+    existing_top3 = _text(row.get("existing_client_candidates_top3")).strip()
+    if existing_top3:
+        parts.append(f"既有客戶候選Top3：{existing_top3}")
+    suggested_top3 = _text(row.get("suggested_prospects_top3")).strip()
+    if suggested_top3:
+        parts.append(f"潛在院所Top3：{suggested_top3}")
+    nearest_existing = _text(row.get("nearest_existing_client_name")).strip()
+    nearest_existing_distance = _num(row.get("nearest_existing_client_distance_m"), default=float("nan"))
+    if nearest_existing:
+        distance_text = f" {nearest_existing_distance:.0f}m" if pd.notna(nearest_existing_distance) else ""
+        parts.append(f"最近既有客戶：{nearest_existing}{distance_text}")
+    nearest_hospital = _text(row.get("nearest_hospital_name")).strip()
+    nearest_hospital_distance = _num(row.get("nearest_hospital_distance_m"), default=float("nan"))
+    if nearest_hospital:
+        distance_text = f" {nearest_hospital_distance:.0f}m" if pd.notna(nearest_hospital_distance) else ""
+        parts.append(f"最近醫院：{nearest_hospital}{distance_text}")
     distance_from_home = _num(row.get("distance_from_home_m"), default=float("nan"))
     selected_distance = _num(row.get("selected_distance_m"), default=float("nan"))
     nearest_distance = _num(row.get("nearest_distance_m"), default=float("nan"))
@@ -404,7 +453,7 @@ def event_evidence_summary(row: pd.Series) -> str:
         parts.append(f"距離差 {distance_gap:.0f}m")
     if pd.notna(rank) and rank > 0:
         parts.append(f"排名 {rank:.0f}")
-    reason = str(row.get("risk_reason_text", "") or "").strip()
+    reason = _text(row.get("risk_reason_text")).strip()
     if reason:
         parts.append(reason)
     return " / ".join(parts) if parts else "無額外風險證據"
@@ -424,7 +473,7 @@ def add_event_risk_drilldown_columns(dataframe: pd.DataFrame) -> pd.DataFrame:
 
 
 def _risk_bucket(row: pd.Series) -> str:
-    level = str(row.get("risk_level", row.get("覆核狀態", "")) or "")
+    level = _text(row.get("risk_level", row.get("覆核狀態", "")))
     score = _num(row.get("risk_score", row.get("風險分數", 0)))
     if "高風險" in level:
         return "高風險"
@@ -446,8 +495,8 @@ def _place_risk_summary(row: pd.Series) -> str:
 
 def summarize_place_risk_visits(
     dataframe: pd.DataFrame,
-    name_col: str = "selected_hospital_name",
-    tag_col: str = "selected_client_tag",
+    name_col: str = "selected_visit_name",
+    tag_col: str = "selected_visit_type",
 ) -> pd.DataFrame:
     columns = [
         "地點名稱",

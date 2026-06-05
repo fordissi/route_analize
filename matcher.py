@@ -140,6 +140,7 @@ class Matcher:
                         "seq_no": int(event["seq_no"]),
                         "candidate_rank": int(candidate["candidate_rank"]),
                         "hospital_id": candidate["hospital_id"],
+                        "hospital_label": candidate["hospital_name"],
                         "beeline_meter": round(float(candidate["beeline_meter"]), 2),
                         "match_score": round(float(candidate["match_score"]), 4),
                         "is_existing_client": int(candidate["is_existing_client"]),

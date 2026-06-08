@@ -161,6 +161,7 @@ CREATE TABLE IF NOT EXISTS daily_risk_summary (
     review_event_count INTEGER,
     high_risk_event_count INTEGER,
     low_confidence_event_count INTEGER,
+    unmatched_event_count INTEGER,
     home_area_only_trace INTEGER,
     home_start_end_without_field_trace INTEGER,
     insufficient_route_evidence INTEGER,
@@ -190,6 +191,7 @@ CREATE TABLE IF NOT EXISTS employee_risk_summary (
     review_event_count INTEGER,
     high_risk_event_count INTEGER,
     low_confidence_event_count INTEGER,
+    unmatched_event_count INTEGER,
     home_area_only_days INTEGER,
     home_start_end_without_field_days INTEGER,
     insufficient_route_evidence_days INTEGER,
@@ -400,6 +402,7 @@ class DatabaseManager:
             self._ensure_column(conn, table_name, "risk_priority_score", "REAL")
             self._ensure_column(conn, table_name, "risk_priority_rate", "REAL")
             self._ensure_column(conn, table_name, "low_confidence_event_count", "INTEGER")
+            self._ensure_column(conn, table_name, "unmatched_event_count", "INTEGER")
         self._ensure_column(conn, "daily_risk_summary", "attendance_span_minutes", "REAL")
         self._ensure_column(conn, "daily_risk_summary", "insufficient_checkin_count", "INTEGER")
         self._ensure_column(conn, "daily_risk_summary", "short_attendance_span", "INTEGER")

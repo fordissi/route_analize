@@ -2,8 +2,10 @@ import pandas as pd
 
 from risk_presentation import (
     add_event_risk_drilldown_columns,
+    build_employee_risk_source_breakdown,
     build_company_monthly_risk_trend,
     build_monthly_risk_trend,
+    prepare_risk_review_quadrant,
 )
 
 
@@ -96,3 +98,72 @@ def test_event_risk_drilldown_handles_pd_na_v3_fields() -> None:
 
     assert result.loc[0, "event_risk_focus"] == "未見明顯風險"
     assert result.loc[0, "event_evidence_summary"] == "無額外風險證據"
+
+
+def test_employee_risk_source_breakdown_uses_v3_score_units() -> None:
+    summary = pd.DataFrame(
+        [
+            {
+                "employee_id": "E01",
+                "employee_label": "E01 Alice",
+                "department": "Sales",
+                "異常風險分": 40,
+                "僅居家附近軌跡天數": 2,
+                "打卡不足天數": 1,
+                "出勤時數過短天數": 2,
+            },
+            {
+                "employee_id": "E02",
+                "employee_label": "E02 Bob",
+                "department": "Sales",
+                "異常風險分": 0,
+                "僅居家附近軌跡天數": 0,
+                "打卡不足天數": 0,
+                "出勤時數過短天數": 0,
+            },
+        ]
+    )
+
+    result = build_employee_risk_source_breakdown(summary)
+    alice = result.loc[result["employee_id"].eq("E01")]
+
+    assert set(alice["source"]) == {"全日居家", "打卡不足", "工時過短", "其他異常"}
+    scores = dict(zip(alice["source"], alice["score"]))
+    assert scores["全日居家"] == 16
+    assert scores["打卡不足"] == 5
+    assert scores["工時過短"] == 8
+    assert scores["其他異常"] == 11
+    assert "E02" not in set(result["employee_id"])
+
+
+def test_prepare_risk_review_quadrant_uses_risk_and_review_scores() -> None:
+    summary = pd.DataFrame(
+        [
+            {
+                "employee_id": "E01",
+                "employee_label": "E01 Alice",
+                "department": "Sales",
+                "異常風險分": 2,
+                "開發/覆核分": 4,
+                "綜合優先分": 10,
+            },
+            {
+                "employee_id": "E02",
+                "employee_label": "E02 Bob",
+                "department": "Sales",
+                "異常風險分": 10,
+                "開發/覆核分": 8,
+                "綜合優先分": 38,
+            },
+        ]
+    )
+
+    result, avg_review, avg_risk = prepare_risk_review_quadrant(summary)
+
+    assert result[["開發/覆核分", "異常風險分"]].to_dict("records") == [
+        {"開發/覆核分": 4, "異常風險分": 2},
+        {"開發/覆核分": 8, "異常風險分": 10},
+    ]
+    assert avg_review == 6
+    assert avg_risk == 6
+    assert result["marker_size"].tolist() == [10, 38]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html as html_lib
+import importlib
 import json
 from io import StringIO
 from math import cos, log, radians
@@ -41,14 +42,19 @@ from hospital_geocode_importer import (
     write_hospitals_with_backup,
 )
 from risk_service import HIGH_RISK_LABEL, LOW_CONFIDENCE_LABEL, NORMAL_LABEL, REVIEW_LABEL
+import risk_presentation as risk_presentation_module
+
+risk_presentation_module = importlib.reload(risk_presentation_module)
 from risk_presentation import (
     add_daily_risk_drilldown_columns,
     add_event_risk_drilldown_columns,
     add_month_axis_columns,
     add_overview_risk_drilldown_columns,
+    build_employee_risk_source_breakdown,
     build_company_monthly_risk_trend,
     build_employee_monthly_warming,
     build_monthly_risk_trend,
+    prepare_risk_review_quadrant,
     summarize_place_risk_visits,
     translate_risk_reason_codes,
 )
@@ -1524,10 +1530,8 @@ def render_print_ranking_grid(rankings: list[tuple[str, pd.DataFrame, str, str, 
 
 
 def render_overview_chart_heading(title: str) -> None:
-    st.markdown(
-        f'<div class="overview-chart-heading"><strong>{html_lib.escape(title)}</strong></div>',
-        unsafe_allow_html=True,
-    )
+    # Plotly charts already render their own titles; avoid duplicate headings above every chart.
+    return None
 
 
 def apply_overview_chart_print_layout(fig, title: str, *, height: int, margin: dict[str, int]) -> None:
@@ -1572,9 +1576,10 @@ def render_overview_drilldown_detail(
     employee_label = selection.get("employee_label", "未標示")
     selection_type = selection.get("type", "")
     type_labels = {
-        "priority_risk": "風險優先分",
+        "priority_risk": "綜合優先分",
         "high_risk": "高風險打卡點",
-        "review_points": "需覆核點數",
+        "review_points": "需覆核打卡次數",
+        "unmatched_events": "未配對打卡",
         "home_only": "僅居家附近",
         "claim_diff": "申報差異",
     }
@@ -1600,6 +1605,8 @@ def render_overview_drilldown_detail(
             ]
         elif selection_type == "review_points":
             risk_days = risk_days.loc[pd.to_numeric(risk_days.get("review_event_count", 0), errors="coerce").fillna(0) > 0]
+        elif selection_type == "unmatched_events":
+            risk_days = risk_days.loc[pd.to_numeric(risk_days.get("unmatched_event_count", 0), errors="coerce").fillna(0) > 0]
         elif selection_type == "home_only":
             risk_days = risk_days.loc[pd.to_numeric(risk_days.get("home_area_only_trace", 0), errors="coerce").fillna(0) > 0]
 
@@ -1611,11 +1618,11 @@ def render_overview_drilldown_detail(
                 columns={
                     "work_date": "日期",
                     "risk_level": "覆核狀態",
-                    "risk_priority_score": "風險優先分",
-                    "risk_score": "原始風險分數",
-                    "review_event_count": "需覆核點數",
-                    "high_risk_event_count": "高風險點數",
-                    "low_confidence_event_count": "低信心點數",
+                    "risk_priority_score": "綜合優先分",
+                    "risk_score": "異常風險分",
+                    "review_score": "開發/覆核分",
+                    "unmatched_event_count": "未配對打卡次數",
+                    "high_risk_event_count": "高風險打卡次數",
                     "home_area_only_trace": "僅居家附近",
                     "home_start_end_without_field_trace": "住家起訖缺外勤",
                     "insufficient_route_evidence": "路線佐證不足",
@@ -1630,11 +1637,11 @@ def render_overview_drilldown_detail(
             day_columns = [
                 "日期",
                 "覆核狀態",
-                "風險優先分",
-                "原始風險分數",
-                "需覆核點數",
-                "高風險點數",
-                "低信心點數",
+                "綜合優先分",
+                "異常風險分",
+                "開發/覆核分",
+                "未配對打卡次數",
+                "高風險打卡次數",
                 "僅居家附近",
                 "住家起訖缺外勤",
                 "路線佐證不足",
@@ -1653,8 +1660,8 @@ def render_overview_drilldown_detail(
                 column_config={
                     "日期": st.column_config.DateColumn(width="small"),
                     "覆核狀態": st.column_config.TextColumn(width="small"),
-                    "風險優先分": st.column_config.NumberColumn(format="%.0f"),
-                    "原始風險分數": st.column_config.NumberColumn(format="%.0f"),
+                    "綜合優先分": st.column_config.NumberColumn(format="%.0f"),
+                    "異常風險分": st.column_config.NumberColumn(format="%.0f"),
                     "主要風險原因": st.column_config.TextColumn(width="medium"),
                     "追查提示": st.column_config.TextColumn(width="medium"),
                     "離家最遠距離": st.column_config.TextColumn(width="small"),
@@ -1696,6 +1703,13 @@ def render_overview_drilldown_detail(
             event_view = event_view.loc[event_view["risk_level"].eq(HIGH_RISK_LABEL)]
         elif selection_type == "review_points":
             event_view = event_view.loc[event_view["risk_level"].isin([HIGH_RISK_LABEL, REVIEW_LABEL])]
+        elif selection_type == "unmatched_events":
+            location_class = (
+                event_view["location_class"].astype(str)
+                if "location_class" in event_view.columns
+                else pd.Series("", index=event_view.index)
+            )
+            event_view = event_view.loc[location_class.eq("unknown_field")]
         elif selection_type == "home_only":
             if not risk_days.empty and "attendance_uid" in risk_days.columns:
                 event_view = event_view.loc[event_view["attendance_uid"].isin(risk_days["attendance_uid"])]
@@ -1715,7 +1729,7 @@ def render_overview_drilldown_detail(
                     "selected_visit_name": "系統判定",
                     "selected_visit_type": "判定類型",
                     "risk_level": "覆核狀態",
-                    "risk_score": "原始風險分數",
+                    "risk_score": "異常風險分",
                     "event_risk_focus": "追查重點",
                     "event_evidence_summary": "證據摘要",
                     "risk_reason_text": "覆核原因",
@@ -1732,7 +1746,7 @@ def render_overview_drilldown_detail(
                 "系統判定",
                 "判定類型",
                 "覆核狀態",
-                "原始風險分數",
+                "異常風險分",
                 "追查重點",
                 "判定距離",
                 "最近候選距離",
@@ -1751,7 +1765,7 @@ def render_overview_drilldown_detail(
                     "系統判定": st.column_config.TextColumn(width="large"),
                     "判定類型": st.column_config.TextColumn(width="small"),
                     "覆核狀態": st.column_config.TextColumn(width="small"),
-                    "原始風險分數": st.column_config.NumberColumn(format="%.0f"),
+                    "異常風險分": st.column_config.NumberColumn(format="%.0f"),
                     "追查重點": st.column_config.TextColumn(width="medium"),
                     "判定距離": st.column_config.TextColumn(width="small"),
                     "最近候選距離": st.column_config.TextColumn(width="small"),
@@ -2484,6 +2498,7 @@ def load_results():
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "home_area_only_trace",
         "home_start_end_without_field_trace",
         "insufficient_route_evidence",
@@ -2512,6 +2527,7 @@ def load_results():
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "home_area_only_days",
         "home_start_end_without_field_days",
         "insufficient_route_evidence_days",
@@ -2546,6 +2562,7 @@ def load_results():
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "home_area_only_trace",
         "home_start_end_without_field_trace",
         "insufficient_route_evidence",
@@ -2569,6 +2586,7 @@ def load_results():
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "home_area_only_days",
         "home_start_end_without_field_days",
         "insufficient_route_evidence_days",
@@ -3837,12 +3855,14 @@ def summarize_period(
     risk_columns = [
         "attendance_uid",
         "risk_score",
+        "review_score",
         "risk_priority_score",
         "risk_priority_rate",
         "risk_rate",
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "attendance_span_minutes",
         "home_area_only_trace",
         "home_start_end_without_field_trace",
@@ -3928,12 +3948,14 @@ def summarize_period(
         merged[column] = merged[column].fillna(False).astype(bool)
     for column in [
         "risk_score",
+        "review_score",
         "risk_priority_score",
         "risk_priority_rate",
         "risk_rate",
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "attendance_span_minutes",
         "home_area_only_trace",
         "home_start_end_without_field_trace",
@@ -3976,9 +3998,13 @@ def summarize_period(
                 "需覆核點數": int(merged["review_event_count"].sum()),
                 "高風險點數": int(merged["high_risk_event_count"].sum()),
                 "低信心點數": int(merged["low_confidence_event_count"].sum()),
+                "未配對打卡次數": int(merged["unmatched_event_count"].sum()),
                 "風險優先分": round(float(merged["risk_priority_score"].sum()), 2),
+                "綜合優先分": round(float(merged["risk_priority_score"].sum()), 2),
                 "平均風險優先分": round(float(merged["risk_priority_score"].mean()), 2),
                 "風險分數": round(float(merged["risk_score"].sum()), 2),
+                "異常風險分": round(float(merged["risk_score"].sum()), 2),
+                "開發/覆核分": round(float(merged["review_score"].sum()), 2),
                 "平均風險率": round(float(merged["risk_rate"].mean()), 4),
                 "僅居家附近軌跡天數": int((merged["home_area_only_trace"] > 0).sum()),
                 "住家起訖但缺外勤軌跡天數": int((merged["home_start_end_without_field_trace"] > 0).sum()),
@@ -3989,6 +4015,10 @@ def summarize_period(
             }
         ]
     )
+    summary["高風險打卡次數"] = summary["高風險點數"]
+    summary["需覆核打卡次數"] = summary["需覆核點數"]
+    summary["平均綜合優先分"] = summary["平均風險優先分"]
+    summary["平均異常風險分"] = (summary["異常風險分"] / summary["出勤天數"].clip(lower=1)).round(2)
 
     detail = merged[
         [
@@ -4007,10 +4037,12 @@ def summarize_period(
             "risk_priority_score",
             "risk_priority_rate",
             "risk_score",
+            "review_score",
             "risk_rate",
             "review_event_count",
             "high_risk_event_count",
             "low_confidence_event_count",
+            "unmatched_event_count",
             "home_area_only_trace",
             "home_start_end_without_field_trace",
             "insufficient_route_evidence",
@@ -4048,13 +4080,15 @@ def summarize_period(
             "estimated_travel_min": "預估移動分鐘",
             "matched_stop_count": "匹配院所數",
             "risk_level": "覆核狀態",
-            "risk_priority_score": "風險優先分",
+            "risk_priority_score": "綜合優先分",
             "risk_priority_rate": "風險優先率",
-            "risk_score": "風險分數",
+            "risk_score": "異常風險分",
+            "review_score": "開發/覆核分",
             "risk_rate": "風險率",
-            "review_event_count": "需覆核點數",
-            "high_risk_event_count": "高風險點數",
+            "review_event_count": "需覆核打卡次數",
+            "high_risk_event_count": "高風險打卡次數",
             "low_confidence_event_count": "低信心點數",
+            "unmatched_event_count": "未配對打卡次數",
             "home_area_only_trace": "僅居家附近軌跡",
             "home_start_end_without_field_trace": "住家起訖但缺外勤軌跡",
             "insufficient_route_evidence": "路線佐證不足",
@@ -4099,12 +4133,14 @@ def build_overview_summary(
     risk_columns = [
         "attendance_uid",
         "risk_score",
+        "review_score",
         "risk_priority_score",
         "risk_priority_rate",
         "risk_rate",
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "home_area_only_trace",
         "home_start_end_without_field_trace",
         "insufficient_route_evidence",
@@ -4146,12 +4182,14 @@ def build_overview_summary(
         merged[column] = merged[column].fillna(False).astype(bool)
     for column in [
         "risk_score",
+        "review_score",
         "risk_priority_score",
         "risk_priority_rate",
         "risk_rate",
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "home_area_only_trace",
         "home_start_end_without_field_trace",
         "insufficient_route_evidence",
@@ -4174,8 +4212,12 @@ def build_overview_summary(
             需覆核點數=("review_event_count", lambda s: int(s.fillna(0).sum())),
             高風險點數=("high_risk_event_count", lambda s: int(s.fillna(0).sum())),
             低信心點數=("low_confidence_event_count", lambda s: int(s.fillna(0).sum())),
+            未配對打卡次數=("unmatched_event_count", lambda s: int(s.fillna(0).sum())),
             風險優先分=("risk_priority_score", lambda s: round(s.fillna(0).sum(), 2)),
+            綜合優先分=("risk_priority_score", lambda s: round(s.fillna(0).sum(), 2)),
             風險分數=("risk_score", lambda s: round(s.fillna(0).sum(), 2)),
+            異常風險分=("risk_score", lambda s: round(s.fillna(0).sum(), 2)),
+            開發覆核分=("review_score", lambda s: round(s.fillna(0).sum(), 2)),
             僅居家附近軌跡天數=("home_area_only_trace", lambda s: int((s.fillna(0) > 0).sum())),
             住家起訖但缺外勤軌跡天數=("home_start_end_without_field_trace", lambda s: int((s.fillna(0) > 0).sum())),
             路線佐證不足天數=("insufficient_route_evidence", lambda s: int((s.fillna(0) > 0).sum())),
@@ -4193,6 +4235,11 @@ def build_overview_summary(
         .reset_index()
     )
     summary["平均風險優先分"] = (summary["風險優先分"] / summary["出勤天數"].clip(lower=1)).round(2)
+    summary["平均綜合優先分"] = summary["平均風險優先分"]
+    summary["開發/覆核分"] = summary["開發覆核分"]
+    summary["平均異常風險分"] = (summary["異常風險分"] / summary["出勤天數"].clip(lower=1)).round(2)
+    summary["高風險打卡次數"] = summary["高風險點數"]
+    summary["需覆核打卡次數"] = summary["需覆核點數"]
     summary["平均風險率"] = (summary["風險分數"] / summary["總GPS點數"].clip(lower=1)).round(4)
     summary = summary.sort_values(["平均風險優先分", "風險優先分", "平均風險率"], ascending=[False, False, False])
     return summary
@@ -5586,10 +5633,11 @@ with tab_period:
         render_risk_focus_band(
             "覆核風險摘要",
             [
-                ("需覆核點數", summary_row["需覆核點數"], "int"),
-                ("高風險點數", summary_row["高風險點數"], "int"),
-                ("平均風險優先分", summary_row["平均風險優先分"], "float"),
+                ("開發/覆核分", summary_row["開發/覆核分"], "float"),
+                ("異常風險分", summary_row["異常風險分"], "float"),
+                ("平均綜合優先分", summary_row["平均風險優先分"], "float"),
                 ("僅居家附近軌跡天數", summary_row["僅居家附近軌跡天數"], "int"),
+                ("未配對打卡次數", summary_row["未配對打卡次數"], "int"),
                 ("打卡不足天數", summary_row["打卡不足天數"], "int"),
                 ("出勤時數過短天數", summary_row["出勤時數過短天數"], "int"),
             ],
@@ -5654,25 +5702,20 @@ with tab_period:
                 )
                 st.plotly_chart(fig_personal_trend, width="stretch")
             with trend_col2:
-                monthly_event_view = employee_monthly_trend.rename(
+                monthly_score_view = employee_monthly_trend.rename(
                     columns={
-                        "year_month": "月份",
-                        "high_risk_event_count": "高風險點數",
-                        "review_event_count": "需覆核點數",
-                        "home_area_only_days": "僅居家附近天數",
-                        "insufficient_checkin_days": "打卡不足天數",
-                        "short_attendance_span_days": "出勤時數過短天數",
-                        "claim_diff_abs_rate": "申報差異率絕對值",
+                        "risk_score": "異常風險分",
+                        "review_score": "開發/覆核分",
                     }
                 )
-                fig_personal_stack = px.bar(
-                    monthly_event_view,
+                fig_personal_score = px.bar(
+                    monthly_score_view,
                     x="month_index",
-                    y=["高風險點數", "需覆核點數", "僅居家附近天數", "打卡不足天數", "出勤時數過短天數"],
+                    y=["異常風險分", "開發/覆核分"],
                     barmode="group",
-                    labels={"value": "數量", "variable": "指標"},
+                    labels={"value": "分數", "variable": "指標"},
                 )
-                fig_personal_stack.update_xaxes(
+                fig_personal_score.update_xaxes(
                     title_text="月份",
                     tickmode="array",
                     tickvals=list(range(len(personal_month_order))),
@@ -5682,13 +5725,13 @@ with tab_period:
                     ticklabeloverflow="allow",
                     range=[-0.5, max(len(personal_month_order) - 0.5, 0.5)],
                 )
-                fig_personal_stack.update_layout(
-                    title_text="個人風險月趨勢：風險來源指標",
+                fig_personal_score.update_layout(
+                    title_text="個人風險月趨勢：分數拆解",
                     height=250,
                     margin=dict(l=36, r=8, t=28, b=42),
                     legend=dict(orientation="h", yanchor="top", y=-0.28, xanchor="left", x=0),
                 )
-                st.plotly_chart(fig_personal_stack, width="stretch")
+                st.plotly_chart(fig_personal_score, width="stretch")
 
         st.markdown("**出勤與里程摘要**")
         metric_row1 = st.columns(4)
@@ -5835,11 +5878,11 @@ with tab_period:
                 "預估總里程",
                 "預估公務里程",
                 "覆核狀態",
-                "需覆核點數",
-                "高風險點數",
-                "低信心點數",
-                "風險優先分",
-                "風險分數",
+                "開發/覆核分",
+                "未配對打卡次數",
+                "高風險打卡次數",
+                "綜合優先分",
+                "異常風險分",
                 "主要風險原因",
                 "追查提示",
                 "覆核原因摘要",
@@ -5862,13 +5905,14 @@ with tab_period:
                 "總出勤分鐘": st.column_config.NumberColumn(format="%.1f"),
                 "有效外勤分鐘": st.column_config.NumberColumn(format="%.1f"),
                 "預估移動分鐘": st.column_config.NumberColumn(format="%.1f"),
-                "風險優先分": st.column_config.NumberColumn(format="%.0f"),
+                "綜合優先分": st.column_config.NumberColumn(format="%.0f"),
                 "風險優先率": st.column_config.NumberColumn(format="%.2f"),
-                "風險分數": st.column_config.NumberColumn(format="%.0f"),
+                "異常風險分": st.column_config.NumberColumn(format="%.0f"),
+                "開發/覆核分": st.column_config.NumberColumn(format="%.0f"),
                 "風險率": st.column_config.NumberColumn(format="%.2f"),
-                "需覆核點數": st.column_config.NumberColumn(format="%d"),
-                "高風險點數": st.column_config.NumberColumn(format="%d"),
-                "低信心點數": st.column_config.NumberColumn(format="%d"),
+                "需覆核打卡次數": st.column_config.NumberColumn(format="%d"),
+                "高風險打卡次數": st.column_config.NumberColumn(format="%d"),
+                "未配對打卡次數": st.column_config.NumberColumn(format="%d"),
                 "打卡不足": st.column_config.NumberColumn(format="%d"),
                 "出勤時數過短": st.column_config.NumberColumn(format="%d"),
                 "出勤時數過長": st.column_config.NumberColumn(format="%d"),
@@ -6179,10 +6223,10 @@ with tab_overview:
     render_risk_focus_band(
         "全業務覆核風險摘要",
         [
-            ("需覆核點數", overview_summary["需覆核點數"].fillna(0).sum() if not overview_summary.empty else 0, "int"),
-            ("高風險點數", overview_summary["高風險點數"].fillna(0).sum() if not overview_summary.empty else 0, "int"),
-            ("低信心點數", overview_summary["低信心點數"].fillna(0).sum() if not overview_summary.empty else 0, "int"),
-            ("平均風險優先分", overview_summary["平均風險優先分"].mean() if not overview_summary.empty else 0, "float"),
+            ("平均綜合優先分", overview_summary["平均綜合優先分"].mean() if not overview_summary.empty else 0, "float"),
+            ("平均異常風險分", overview_summary["平均異常風險分"].mean() if not overview_summary.empty else 0, "float"),
+            ("開發/覆核分", overview_summary["開發/覆核分"].fillna(0).sum() if not overview_summary.empty else 0, "float"),
+            ("未配對打卡次數", overview_summary["未配對打卡次數"].fillna(0).sum() if not overview_summary.empty else 0, "int"),
             ("僅居家附近軌跡天數", overview_summary["僅居家附近軌跡天數"].fillna(0).sum() if not overview_summary.empty else 0, "int"),
         ],
         (
@@ -6296,26 +6340,23 @@ with tab_overview:
             )
             st.plotly_chart(fig_employee_count, width="stretch")
 
-        render_overview_chart_heading("月風險類型分布")
+        render_overview_chart_heading("月分數拆解")
         monthly_stack_col = st.container()
         monthly_table_col = st.container()
         with monthly_stack_col:
             company_monthly_view = company_monthly.rename(
                 columns={
                     "year_month": "月份",
-                    "high_risk_event_count": "高風險點數",
-                    "review_event_count": "需覆核點數",
-                    "home_area_only_days": "僅居家附近天數",
-                    "insufficient_checkin_days": "打卡不足天數",
-                    "short_attendance_span_days": "出勤時數過短天數",
+                    "risk_score": "異常風險分",
+                    "review_score": "開發/覆核分",
                 }
             )
             fig_company_stack = px.bar(
                 company_monthly_view,
                 x="month_index",
-                y=["高風險點數", "需覆核點數", "僅居家附近天數", "打卡不足天數", "出勤時數過短天數"],
+                y=["異常風險分", "開發/覆核分"],
                 barmode="group",
-                labels={"value": "數量", "variable": "指標"},
+                labels={"value": "分數", "variable": "指標"},
             )
             fig_company_stack.update_xaxes(
                 title_text="月份",
@@ -6329,7 +6370,7 @@ with tab_overview:
             )
             apply_overview_chart_print_layout(
                 fig_company_stack,
-                "月風險來源分布",
+                "月分數拆解",
                 height=300,
                 margin=dict(l=44, r=72, t=34, b=48),
             )
@@ -6417,8 +6458,8 @@ with tab_overview:
         if not overview_summary.empty
         else overview_summary
     )
-    review_rank = (
-        overview_summary.sort_values(["需覆核點數", "風險優先分"], ascending=[False, False])
+    unmatched_rank = (
+        overview_summary.sort_values(["未配對打卡次數", "風險優先分"], ascending=[False, False])
         if not overview_summary.empty
         else overview_summary
     )
@@ -6435,7 +6476,7 @@ with tab_overview:
     render_print_ranking_grid(
         [
             ("風險優先分 Top 5", priority_risk_rank, "employee_label", "風險優先分", "float"),
-            ("需覆核點數 Top 5", review_rank, "employee_label", "需覆核點數", "int"),
+            ("未配對打卡 Top 5", unmatched_rank, "employee_label", "未配對打卡次數", "int"),
             ("僅居家附近 Top 5", home_rank, "employee_label", "僅居家附近軌跡天數", "int"),
             ("申報差異 Top 5", claim_diff_rank, "employee_label", "差異率絕對值", "percent"),
         ]
@@ -6452,11 +6493,11 @@ with tab_overview:
         )
     with rank_col2:
         render_clickable_ranking_card(
-            "需覆核點數 Top 5",
-            review_rank,
+            "未配對打卡 Top 5",
+            unmatched_rank,
             "employee_label",
-            "需覆核點數",
-            "review_points",
+            "未配對打卡次數",
+            "unmatched_events",
         )
     with rank_col3:
         render_clickable_ranking_card(
@@ -6494,12 +6535,12 @@ with tab_overview:
     top_row = st.columns(4)
     top_row[0].metric("全員總計預估里程", f"{overview_summary['總計預估里程'].sum():.2f} km")
     top_row[1].metric("全員總計公務里程", f"{overview_summary['總計預估公務里程'].sum():.2f} km")
-    top_row[2].metric("需覆核點數", int(overview_summary["需覆核點數"].fillna(0).sum()) if not overview_summary.empty else 0)
-    top_row[3].metric("高風險點數", int(overview_summary["高風險點數"].fillna(0).sum()) if not overview_summary.empty else 0)
+    top_row[2].metric("開發/覆核分", f"{overview_summary['開發/覆核分'].fillna(0).sum():.0f}" if not overview_summary.empty else "0")
+    top_row[3].metric("未配對打卡次數", int(overview_summary["未配對打卡次數"].fillna(0).sum()) if not overview_summary.empty else 0)
     risk_top_row = st.columns(4)
     risk_top_row[0].metric("平均異常率", f"{overview_summary['異常率'].mean():.2%}" if not overview_summary.empty else "0.00%")
     risk_top_row[1].metric("平均超時率", f"{overview_summary['超時出勤率'].mean():.2%}" if not overview_summary.empty else "0.00%")
-    risk_top_row[2].metric("平均風險優先分", f"{overview_summary['平均風險優先分'].mean():.2f}" if not overview_summary.empty else "0.00")
+    risk_top_row[2].metric("平均綜合優先分", f"{overview_summary['平均綜合優先分'].mean():.2f}" if not overview_summary.empty else "0.00")
     risk_top_row[3].metric("僅居家附近軌跡天數", int(overview_summary["僅居家附近軌跡天數"].fillna(0).sum()) if not overview_summary.empty else 0)
 
     chart1 = st.container()
@@ -6528,32 +6569,37 @@ with tab_overview:
             fig_km.update_xaxes(range=[0, max(float(km_max) * 1.12, 1.0)], automargin=True)
             st.plotly_chart(fig_km, width="stretch")
     with chart2:
-        render_overview_chart_heading("風險率 vs 異常率")
+        render_overview_chart_heading("異常風險分 x 開發/覆核分象限")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
-            scatter_overview = overview_summary.copy()
-            scatter_overview["需覆核點數標記"] = scatter_overview["需覆核點數"].fillna(0).clip(lower=1)
+            scatter_overview, avg_review_score, avg_risk_score = prepare_risk_review_quadrant(overview_summary)
             fig_scatter = px.scatter(
                 scatter_overview,
-                x="異常率",
-                y="平均風險率",
-                size="需覆核點數標記",
+                x="開發/覆核分",
+                y="異常風險分",
+                size="marker_size",
                 color="department",
                 hover_name="employee_label",
-                labels={"異常率": "異常率", "平均風險率": "平均風險率", "department": "部門"},
-                hover_data={"需覆核點數": True, "需覆核點數標記": False},
+                labels={
+                    "開發/覆核分": "開發/覆核分",
+                    "異常風險分": "異常風險分",
+                    "department": "部門",
+                },
+                hover_data={"綜合優先分": True, "marker_size": False},
             )
             apply_overview_chart_print_layout(
                 fig_scatter,
-                "風險率 vs 異常率",
+                "異常風險分 x 開發/覆核分象限",
                 height=340,
                 margin=dict(l=56, r=160, t=36, b=46),
             )
-            scatter_x_max = pd.to_numeric(scatter_overview["異常率"], errors="coerce").fillna(0).max()
-            scatter_y_max = pd.to_numeric(scatter_overview["平均風險率"], errors="coerce").fillna(0).max()
+            scatter_x_max = pd.to_numeric(scatter_overview["開發/覆核分"], errors="coerce").fillna(0).max()
+            scatter_y_max = pd.to_numeric(scatter_overview["異常風險分"], errors="coerce").fillna(0).max()
             fig_scatter.update_xaxes(range=[0, max(float(scatter_x_max) * 1.15, 1.0)], automargin=True)
             fig_scatter.update_yaxes(range=[0, max(float(scatter_y_max) * 1.15, 1.0)], automargin=True)
+            fig_scatter.add_vline(x=avg_review_score, line_width=1, line_dash="dash", line_color="#94a3b8")
+            fig_scatter.add_hline(y=avg_risk_score, line_width=1, line_dash="dash", line_color="#94a3b8")
             st.plotly_chart(fig_scatter, width="stretch")
 
     chart3 = st.container()
@@ -6621,62 +6667,65 @@ with tab_overview:
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
-            risk_source_columns = [
-                "需覆核點數",
-                "高風險點數",
-                "僅居家附近軌跡天數",
-                "打卡不足天數",
-                "出勤時數過短天數",
-            ]
-            fig_risk_rank = px.bar(
-                overview_summary.sort_values("風險優先分", ascending=True),
-                x=risk_source_columns,
-                y="employee_label",
-                barmode="group",
-                orientation="h",
-                labels={"employee_label": "員工", "value": "數量", "variable": "指標"},
-            )
-            apply_overview_chart_print_layout(
-                fig_risk_rank,
-                "員工風險來源拆解",
-                height=360,
-                margin=dict(l=132, r=160, t=36, b=42),
-            )
-            risk_rank_max = pd.to_numeric(
-                overview_summary[risk_source_columns].stack(),
-                errors="coerce",
-            ).fillna(0).max()
-            fig_risk_rank.update_xaxes(range=[0, max(float(risk_rank_max) * 1.12, 1.0)], automargin=True)
-            st.plotly_chart(fig_risk_rank, width="stretch")
+            risk_source_breakdown = build_employee_risk_source_breakdown(overview_summary)
+            if risk_source_breakdown.empty:
+                st.info("目前沒有可拆解的異常風險分。")
+            else:
+                employee_order = (
+                    overview_summary.sort_values("綜合優先分", ascending=True)["employee_label"]
+                    .dropna()
+                    .drop_duplicates()
+                    .tolist()
+                )
+                fig_risk_rank = px.bar(
+                    risk_source_breakdown,
+                    x="score",
+                    y="employee_label",
+                    color="source",
+                    barmode="stack",
+                    orientation="h",
+                    category_orders={"employee_label": employee_order},
+                    labels={"employee_label": "員工", "score": "異常風險分", "source": "來源"},
+                )
+                apply_overview_chart_print_layout(
+                    fig_risk_rank,
+                    "員工風險來源拆解",
+                    height=360,
+                    margin=dict(l=132, r=160, t=36, b=42),
+                )
+                risk_rank_max = pd.to_numeric(risk_source_breakdown["score"], errors="coerce").fillna(0).max()
+                fig_risk_rank.update_xaxes(range=[0, max(float(risk_rank_max) * 1.12, 1.0)], automargin=True)
+                st.plotly_chart(fig_risk_rank, width="stretch")
     with risk_chart2:
-        render_overview_chart_heading("風險優先分排名")
+        render_overview_chart_heading("綜合優先分排名")
         if overview_summary.empty:
             st.info("目前日期區間沒有資料。")
         else:
             fig_risk_score = px.bar(
-                overview_summary.sort_values("風險優先分", ascending=True),
-                x="風險優先分",
+                overview_summary.sort_values("綜合優先分", ascending=True),
+                x="綜合優先分",
                 y="employee_label",
                 color="department",
                 orientation="h",
-                labels={"employee_label": "員工", "風險優先分": "風險優先分", "department": "部門"},
+                labels={"employee_label": "員工", "綜合優先分": "綜合優先分", "department": "部門"},
                 hover_data={
-                    "需覆核點數": True,
-                    "高風險點數": True,
+                    "開發/覆核分": True,
+                    "異常風險分": True,
+                    "未配對打卡次數": True,
+                    "高風險打卡次數": True,
                     "僅居家附近軌跡天數": True,
                     "打卡不足天數": True,
                     "出勤時數過短天數": True,
-                    "風險分數": True,
-                    "平均風險優先分": ":.2f",
+                    "平均綜合優先分": ":.2f",
                 },
             )
             apply_overview_chart_print_layout(
                 fig_risk_score,
-                "風險優先分排名",
+                "綜合優先分排名",
                 height=340,
                 margin=dict(l=132, r=160, t=36, b=42),
             )
-            risk_score_max = pd.to_numeric(overview_summary["風險優先分"], errors="coerce").fillna(0).max()
+            risk_score_max = pd.to_numeric(overview_summary["綜合優先分"], errors="coerce").fillna(0).max()
             fig_risk_score.update_xaxes(range=[0, max(float(risk_score_max) * 1.12, 1.0)], automargin=True)
             st.plotly_chart(fig_risk_score, width="stretch")
 
@@ -6879,15 +6928,14 @@ with tab_overview:
             "總計預估里程",
             "總計預估公務里程",
             "未打卡未處理次數",
-            "需覆核點數",
-            "高風險點數",
-            "低信心點數",
-            "風險優先分",
-            "平均風險優先分",
-            "風險分數",
-            "平均風險率",
+            "開發/覆核分",
+            "未配對打卡次數",
+            "高風險打卡次數",
+            "綜合優先分",
+            "平均綜合優先分",
+            "異常風險分",
+            "平均異常風險分",
             "主要風險原因",
-            "追查提示",
             "僅居家附近軌跡天數",
             "打卡不足天數",
             "出勤時數過短天數",
@@ -6936,15 +6984,14 @@ with tab_overview:
             "員工編號",
             "員工",
             "部門",
-            "需覆核點數",
-            "高風險點數",
-            "低信心點數",
-            "風險優先分",
-            "平均風險優先分",
-            "風險分數",
-            "平均風險率",
+            "開發/覆核分",
+            "未配對打卡次數",
+            "高風險打卡次數",
+            "綜合優先分",
+            "平均綜合優先分",
+            "異常風險分",
+            "平均異常風險分",
             "主要風險原因",
-            "追查提示",
             "僅居家附近軌跡天數",
             "住家起訖但缺外勤軌跡天數",
             "路線佐證不足天數",
@@ -6957,13 +7004,13 @@ with tab_overview:
             width="stretch",
             hide_index=True,
             column_config={
-                "需覆核點數": st.column_config.NumberColumn(format="%d"),
-                "高風險點數": st.column_config.NumberColumn(format="%d"),
-                "低信心點數": st.column_config.NumberColumn(format="%d"),
-                "風險優先分": st.column_config.NumberColumn(format="%.0f"),
-                "平均風險優先分": st.column_config.NumberColumn(format="%.2f"),
-                "風險分數": st.column_config.NumberColumn(format="%.0f"),
-                "平均風險率": st.column_config.NumberColumn(format="%.2f"),
+                "開發/覆核分": st.column_config.NumberColumn(format="%.0f"),
+                "未配對打卡次數": st.column_config.NumberColumn(format="%d"),
+                "高風險打卡次數": st.column_config.NumberColumn(format="%d"),
+                "綜合優先分": st.column_config.NumberColumn(format="%.0f"),
+                "平均綜合優先分": st.column_config.NumberColumn(format="%.2f"),
+                "異常風險分": st.column_config.NumberColumn(format="%.0f"),
+                "平均異常風險分": st.column_config.NumberColumn(format="%.2f"),
                 "僅居家附近軌跡天數": st.column_config.NumberColumn(format="%d"),
                 "住家起訖但缺外勤軌跡天數": st.column_config.NumberColumn(format="%d"),
                 "路線佐證不足天數": st.column_config.NumberColumn(format="%d"),

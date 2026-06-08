@@ -19,6 +19,15 @@ from overview_pdf_exporter import (
 from risk_presentation import prepare_month_axis_for_pdf
 
 
+def _ensure_numeric_column(dataframe: pd.DataFrame, column: str, fallback: str | None = None) -> None:
+    if column in dataframe.columns:
+        dataframe[column] = pd.to_numeric(dataframe[column], errors="coerce").fillna(0)
+    elif fallback and fallback in dataframe.columns:
+        dataframe[column] = pd.to_numeric(dataframe[fallback], errors="coerce").fillna(0)
+    else:
+        dataframe[column] = 0
+
+
 @dataclass(frozen=True)
 class PersonalPeriodPdfContext:
     title: str
@@ -72,6 +81,8 @@ def _build_personal_figures(
         max_months=6,
         max_ticks=6,
     )
+    _ensure_numeric_column(trend, "risk_score")
+    _ensure_numeric_column(trend, "review_score")
     fig_personal_trend = px.line(
         trend,
         x="month_index",
@@ -97,19 +108,13 @@ def _build_personal_figures(
     )
     charts.append(("個人風險月趨勢：每出勤日風險優先分", fig_personal_trend, 400))
 
-    monthly_event_view = trend.rename(
-        columns={
-            "high_risk_event_count": "高風險點數",
-            "review_event_count": "需覆核點數",
-            "home_area_only_days": "僅居家附近天數",
-        }
-    )
+    monthly_event_view = trend.rename(columns={"risk_score": "異常風險分", "review_score": "開發/覆核分"})
     fig_personal_stack = px.bar(
         monthly_event_view,
         x="month_index",
-        y=["高風險點數", "需覆核點數", "僅居家附近天數"],
+        y=["異常風險分", "開發/覆核分"],
         barmode="group",
-        labels={"value": "數量", "variable": "指標"},
+        labels={"value": "分數", "variable": "指標"},
     )
     fig_personal_stack.update_xaxes(
         title_text="月份",
@@ -122,11 +127,11 @@ def _build_personal_figures(
     )
     _apply_static_chart_layout(
         fig_personal_stack,
-        "個人風險月趨勢：風險指標數量",
+        "個人風險月趨勢：分數拆解",
         height=400,
         margin=dict(l=74, r=132, t=64, b=74),
     )
-    charts.append(("個人風險月趨勢：風險指標數量", fig_personal_stack, 400))
+    charts.append(("個人風險月趨勢：分數拆解", fig_personal_stack, 400))
     return charts
 
 
@@ -153,14 +158,27 @@ def build_personal_period_pdf_context(
     place_risk_table: pd.DataFrame,
     image_renderer: ImageRenderer | None = None,
 ) -> PersonalPeriodPdfContext:
+    summary_df = summary_df.copy()
+    fallback_columns = {
+        "綜合優先分": "風險優先分",
+        "平均綜合優先分": "平均風險優先分",
+        "異常風險分": "風險分數",
+        "高風險打卡次數": "高風險點數",
+        "未配對打卡次數": "需覆核點數",
+    }
+    for target, source in fallback_columns.items():
+        if target not in summary_df.columns:
+            summary_df[target] = summary_df[source] if source in summary_df.columns else 0
+    if "開發/覆核分" not in summary_df.columns:
+        summary_df["開發/覆核分"] = 0
     summary_row = _first_row(summary_df)
 
     risk_metrics = [
-        _metric_from_row(summary_row, "需覆核點數", "int"),
-        _metric_from_row(summary_row, "高風險點數", "int"),
-        _metric_from_row(summary_row, "低信心點數", "int"),
-        _metric_from_row(summary_row, "平均風險優先分", "float"),
+        _metric_from_row(summary_row, "開發/覆核分", "float"),
+        _metric_from_row(summary_row, "異常風險分", "float"),
+        _metric_from_row(summary_row, "平均綜合優先分", "float"),
         _metric_from_row(summary_row, "僅居家附近軌跡天數", "int"),
+        _metric_from_row(summary_row, "未配對打卡次數", "int"),
     ]
     route_metrics = [
         _metric_from_row(summary_row, "總出勤時數", "float", "小時"),
@@ -208,10 +226,11 @@ def build_personal_period_pdf_context(
             "總打卡次數",
             "總GPS點數",
             "總計預估里程",
-            "需覆核點數",
-            "高風險點數",
-            "低信心點數",
-            "平均風險優先分",
+            "開發/覆核分",
+            "未配對打卡次數",
+            "高風險打卡次數",
+            "平均綜合優先分",
+            "異常風險分",
             "主要風險原因",
         ],
     )
@@ -237,7 +256,6 @@ def build_personal_period_pdf_context(
             "拜訪次數",
             "高風險",
             "需覆核",
-            "低信心",
             "正常",
             "風險拜訪次數",
             "主要風險原因",
@@ -253,7 +271,6 @@ def build_personal_period_pdf_context(
             "預估公務里程",
             "需覆核點數",
             "高風險點數",
-            "低信心點數",
             "風險優先分",
             "風險等級",
             "主要風險原因",

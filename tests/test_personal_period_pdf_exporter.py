@@ -84,7 +84,12 @@ def test_build_personal_period_pdf_context_builds_static_charts_and_metrics():
                 "高風險點數": 16,
                 "低信心點數": 4,
                 "風險優先分": 255.0,
+                "綜合優先分": 255.0,
+                "異常風險分": 80.0,
+                "開發/覆核分": 16.0,
+                "未配對打卡次數": 4,
                 "平均風險優先分": 12.75,
+                "平均綜合優先分": 12.75,
                 "僅居家附近軌跡天數": 0,
             }
         ]
@@ -102,6 +107,8 @@ def test_build_personal_period_pdf_context_builds_static_charts_and_metrics():
                 "month_label": "2026-04",
                 "month_index": 0,
                 "risk_priority_per_day": 15.5,
+                "risk_score": 20,
+                "review_score": 8,
                 "high_risk_event_count": 14,
                 "review_event_count": 14,
                 "home_area_only_days": 1,
@@ -111,6 +118,8 @@ def test_build_personal_period_pdf_context_builds_static_charts_and_metrics():
                 "month_label": "2026-05",
                 "month_index": 1,
                 "risk_priority_per_day": 12.75,
+                "risk_score": 16,
+                "review_score": 16,
                 "high_risk_event_count": 16,
                 "review_event_count": 16,
                 "home_area_only_days": 0,
@@ -151,14 +160,15 @@ def test_build_personal_period_pdf_context_builds_static_charts_and_metrics():
     )
 
     assert context.employee_label == "HS02 李俊智"
-    assert ("需覆核點數", "16") in context.risk_metrics
+    assert ("開發/覆核分", "16.00") in context.risk_metrics
+    assert ("未配對打卡次數", "4") in context.risk_metrics
     assert ("總出勤時數", "86.47 小時") in context.route_metrics
     assert ("月申請里程", "0.00 km") in context.claim_metrics
     assert len(context.charts) == 2
     assert base64.b64decode(context.charts[0][1].split(",", 1)[1]).startswith(b"\x89PNG")
     assert [figure.layout.title.text for figure in rendered_figures] == [
         "個人風險月趨勢：每出勤日風險優先分",
-        "個人風險月趨勢：風險指標數量",
+        "個人風險月趨勢：分數拆解",
     ]
 
 

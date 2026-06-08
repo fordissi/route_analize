@@ -112,6 +112,7 @@ DAILY_RISK_COLUMNS = [
     "review_event_count",
     "high_risk_event_count",
     "low_confidence_event_count",
+    "unmatched_event_count",
     "risk_level",
     "home_area_only_trace",
     "home_start_end_without_field_trace",
@@ -141,6 +142,7 @@ EMPLOYEE_RISK_COLUMNS = [
     "review_event_count",
     "high_risk_event_count",
     "low_confidence_event_count",
+    "unmatched_event_count",
     "home_area_only_days",
     "home_start_end_without_field_days",
     "insufficient_route_evidence_days",
@@ -214,6 +216,7 @@ class RiskService:
                     "review_event_count",
                     "high_risk_event_count",
                     "low_confidence_event_count",
+                    "unmatched_event_count",
                     "risk_reason_summary",
                 ]
             )
@@ -241,6 +244,9 @@ class RiskService:
             risk["review_event"] = risk["risk_level"].isin(self._review_levels())
             risk["high_risk_event"] = risk["risk_level"].isin(self._high_risk_levels())
             risk["low_confidence_event"] = risk["risk_level"].eq(LOW_CONFIDENCE_LABEL)
+            if "location_class" not in risk.columns:
+                risk["location_class"] = ""
+            risk["unmatched_event"] = risk["location_class"].astype(str).eq("unknown_field")
             grouped = (
                 risk.groupby("attendance_uid", dropna=False)
                 .agg(
@@ -251,6 +257,7 @@ class RiskService:
                     review_event_count=("review_event", "sum"),
                     high_risk_event_count=("high_risk_event", "sum"),
                     low_confidence_event_count=("low_confidence_event", "sum"),
+                    unmatched_event_count=("unmatched_event", "sum"),
                     risk_reason_summary=("risk_reason_codes", self._join_reason_codes),
                 )
                 .reset_index()
@@ -265,11 +272,13 @@ class RiskService:
             "review_event_count",
             "high_risk_event_count",
             "low_confidence_event_count",
+            "unmatched_event_count",
         ]:
             result[column] = pd.to_numeric(result[column], errors="coerce").fillna(0)
         result["review_event_count"] = result["review_event_count"].astype(int)
         result["high_risk_event_count"] = result["high_risk_event_count"].astype(int)
         result["low_confidence_event_count"] = result["low_confidence_event_count"].astype(int)
+        result["unmatched_event_count"] = result["unmatched_event_count"].astype(int)
         result["risk_reason_summary"] = result["risk_reason_summary"].fillna("")
 
         home_trace = self._build_home_trace_risk(result, raw_events, employees, matches)
@@ -323,6 +332,7 @@ class RiskService:
             "review_event_count",
             "high_risk_event_count",
             "low_confidence_event_count",
+            "unmatched_event_count",
             "home_area_only_trace",
             "home_start_end_without_field_trace",
             "insufficient_route_evidence",
@@ -349,6 +359,7 @@ class RiskService:
                 review_event_count=("review_event_count", "sum"),
                 high_risk_event_count=("high_risk_event_count", "sum"),
                 low_confidence_event_count=("low_confidence_event_count", "sum"),
+                unmatched_event_count=("unmatched_event_count", "sum"),
                 home_area_only_days=("home_area_only_trace", "sum"),
                 home_start_end_without_field_days=("home_start_end_without_field_trace", "sum"),
                 insufficient_route_evidence_days=("insufficient_route_evidence", "sum"),
@@ -946,15 +957,25 @@ class RiskService:
         if segments.empty:
             return set()
 
+        if "status" in segments.columns:
+            segments = segments.loc[segments["status"].astype(str).str.lower().eq("ok")].copy()
         segments["duration_seconds"] = pd.to_numeric(segments["duration_seconds"], errors="coerce")
-        segments = segments.dropna(subset=["attendance_uid", "segment_no", "duration_seconds"]).sort_values(
-            ["attendance_uid", "segment_no"],
-            na_position="last",
-        )
+        segments["segment_no"] = pd.to_numeric(segments["segment_no"], errors="coerce")
+        segments = segments.dropna(subset=["attendance_uid", "segment_no", "duration_seconds"]).copy()
+        segments["segment_no"] = segments["segment_no"].astype(int)
+        sort_columns = ["attendance_uid", "segment_no"]
+        ascending = [True, True]
+        if "calculated_at" in segments.columns:
+            segments["calculated_at_sort"] = pd.to_datetime(segments["calculated_at"], errors="coerce")
+            sort_columns.append("calculated_at_sort")
+            ascending.append(False)
+        segments = segments.sort_values(sort_columns, ascending=ascending, na_position="last")
+        segments = segments.drop_duplicates(subset=["attendance_uid", "segment_no", "segment_type"], keep="first")
         if segments.empty:
             return set()
 
-        segments["pair_no"] = segments.groupby("attendance_uid", sort=False).cumcount() + 1
+        first_between_segment_no = segments.groupby("attendance_uid", sort=False)["segment_no"].transform("min")
+        segments["pair_no"] = segments["segment_no"] - first_between_segment_no + 1
         paired = event_pairs.merge(
             segments[["attendance_uid", "pair_no", "duration_seconds"]],
             on=["attendance_uid", "pair_no"],

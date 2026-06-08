@@ -573,6 +573,48 @@ def test_impossible_travel_pairs_skip_non_gps_events() -> None:
     assert "impossible_travel_time" in e2_reasons
 
 
+def test_impossible_travel_pairs_dedupe_route_segments_by_segment_no() -> None:
+    matches = pd.DataFrame(
+        [
+            {
+                "event_uid": event_uid,
+                "attendance_uid": "a1",
+                "seq_no": index,
+                "candidate_rank": 1,
+                "hospital_id": f"h{index}",
+                "hospital_label": "衛生福利部八里療養院",
+                "beeline_meter": 120.0,
+                "is_existing_client": 1,
+                "is_selected": 1,
+                "selection_type": "既有客戶",
+            }
+            for index, event_uid in enumerate(["e1", "e2", "e3", "e4"], start=1)
+        ]
+    )
+    raw_events = pd.DataFrame(
+        [
+            {"event_uid": "e1", "attendance_uid": "a1", "actual_time": "2026-05-26 08:00:00", "source_row_no": 1, "gps_lat": 25.1000, "gps_lon": 121.4000},
+            {"event_uid": "e2", "attendance_uid": "a1", "actual_time": "2026-05-26 09:00:00", "source_row_no": 2, "gps_lat": 25.1200, "gps_lon": 121.4050},
+            {"event_uid": "e3", "attendance_uid": "a1", "actual_time": "2026-05-26 12:33:18", "source_row_no": 3, "gps_lat": 25.145159, "gps_lon": 121.412829},
+            {"event_uid": "e4", "attendance_uid": "a1", "actual_time": "2026-05-26 12:34:20", "source_row_no": 4, "gps_lat": 25.145592, "gps_lon": 121.412920},
+        ]
+    )
+    route_segments = pd.DataFrame(
+        [
+            {"attendance_uid": "a1", "segment_no": 1, "segment_type": "home_to_first", "duration_seconds": 600, "distance_meters": 2000, "status": "ok", "calculated_at": "2026-05-26 13:00:00"},
+            {"attendance_uid": "a1", "segment_no": 2, "segment_type": "between_points", "duration_seconds": 300, "distance_meters": 2000, "status": "ok", "calculated_at": "2026-05-26 13:00:00"},
+            {"attendance_uid": "a1", "segment_no": 3, "segment_type": "between_points", "duration_seconds": 600, "distance_meters": 3000, "status": "ok", "calculated_at": "2026-05-26 13:00:00"},
+            {"attendance_uid": "a1", "segment_no": 3, "segment_type": "between_points", "duration_seconds": 9999, "distance_meters": 3000, "status": "ok", "calculated_at": "2026-05-26 12:00:00"},
+            {"attendance_uid": "a1", "segment_no": 4, "segment_type": "between_points", "duration_seconds": 40, "distance_meters": 40, "status": "ok", "calculated_at": "2026-05-26 13:00:00"},
+        ]
+    )
+
+    result = RiskService(make_config()).build_event_risk(raw_events, matches, route_segments, pd.DataFrame())
+
+    e4_reasons = result.loc[result["event_uid"] == "e4", "risk_reason_codes"].iloc[0]
+    assert "impossible_travel_time" not in e4_reasons
+
+
 def test_home_area_only_trace_requires_review() -> None:
     event_risk = pd.DataFrame(
         [
@@ -911,6 +953,49 @@ def test_daily_summary_counts_high_risk_event_label() -> None:
     assert row["high_risk_event_count"] == 1
     assert row["review_event_count"] == 1
     assert row["risk_level"] == "高風險需覆核"
+
+
+def test_daily_summary_counts_unknown_field_as_unmatched_event() -> None:
+    event_risk = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "risk_level": "需覆核",
+                "risk_score": 0,
+                "review_score": 4,
+                "location_class": "unknown_field",
+                "risk_reason_codes": "unknown_field",
+            },
+            {
+                "event_uid": "e2",
+                "attendance_uid": "a1",
+                "risk_level": "正常",
+                "risk_score": 0,
+                "review_score": 0,
+                "location_class": "existing_client_visit",
+                "risk_reason_codes": "",
+            },
+        ]
+    )
+    attendance = pd.DataFrame(
+        [
+            {
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "employee_name": "User A",
+                "department": "Sales",
+                "work_date": "2026-05-08",
+                "gps_event_count": 2,
+            }
+        ]
+    )
+
+    daily = RiskService(make_config()).build_daily_risk_summary(event_risk, attendance)
+    employee = RiskService(make_config()).build_employee_risk_summary(daily)
+
+    assert daily.iloc[0]["unmatched_event_count"] == 1
+    assert employee.iloc[0]["unmatched_event_count"] == 1
 
 
 def test_employee_summary_preserves_high_risk_daily_label() -> None:

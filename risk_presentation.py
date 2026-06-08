@@ -69,11 +69,14 @@ def build_monthly_risk_trend(daily_risk: pd.DataFrame, monthly_claims: pd.DataFr
         "employee_label",
         "department",
         "attendance_days",
+        "risk_score",
+        "review_score",
         "risk_priority_score",
         "risk_priority_per_day",
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "home_area_only_days",
         "insufficient_checkin_days",
         "short_attendance_span_days",
@@ -97,9 +100,12 @@ def build_monthly_risk_trend(daily_risk: pd.DataFrame, monthly_claims: pd.DataFr
         work["department"] = ""
     numeric_columns = [
         "risk_priority_score",
+        "risk_score",
+        "review_score",
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "home_area_only_trace",
         "insufficient_checkin_count",
         "short_attendance_span",
@@ -115,10 +121,13 @@ def build_monthly_risk_trend(daily_risk: pd.DataFrame, monthly_claims: pd.DataFr
         work.groupby(["year_month", "employee_id", "employee_label", "department"], dropna=False, as_index=False)
         .agg(
             attendance_days=("work_date", "nunique"),
+            risk_score=("risk_score", "sum"),
+            review_score=("review_score", "sum"),
             risk_priority_score=("risk_priority_score", "sum"),
             review_event_count=("review_event_count", "sum"),
             high_risk_event_count=("high_risk_event_count", "sum"),
             low_confidence_event_count=("low_confidence_event_count", "sum"),
+            unmatched_event_count=("unmatched_event_count", "sum"),
             home_area_only_days=("home_area_only_trace", lambda s: int((s.fillna(0) > 0).sum())),
             insufficient_checkin_days=("insufficient_checkin_count", lambda s: int((s.fillna(0) > 0).sum())),
             short_attendance_span_days=("short_attendance_span", lambda s: int((s.fillna(0) > 0).sum())),
@@ -207,12 +216,15 @@ def build_company_monthly_risk_trend(monthly_trend: pd.DataFrame) -> pd.DataFram
         "year_month",
         "employee_count",
         "attendance_days",
+        "risk_score",
+        "review_score",
         "risk_priority_score",
         "risk_priority_per_day",
         "risk_priority_per_employee",
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "home_area_only_days",
         "insufficient_checkin_days",
         "short_attendance_span_days",
@@ -231,9 +243,12 @@ def build_company_monthly_risk_trend(monthly_trend: pd.DataFrame) -> pd.DataFram
     numeric_columns = [
         "attendance_days",
         "risk_priority_score",
+        "risk_score",
+        "review_score",
         "review_event_count",
         "high_risk_event_count",
         "low_confidence_event_count",
+        "unmatched_event_count",
         "home_area_only_days",
         "insufficient_checkin_days",
         "short_attendance_span_days",
@@ -258,10 +273,13 @@ def build_company_monthly_risk_trend(monthly_trend: pd.DataFrame) -> pd.DataFram
         .agg(
             employee_count=("employee_id", "nunique"),
             attendance_days=("attendance_days", "sum"),
+            risk_score=("risk_score", "sum"),
+            review_score=("review_score", "sum"),
             risk_priority_score=("risk_priority_score", "sum"),
             review_event_count=("review_event_count", "sum"),
             high_risk_event_count=("high_risk_event_count", "sum"),
             low_confidence_event_count=("low_confidence_event_count", "sum"),
+            unmatched_event_count=("unmatched_event_count", "sum"),
             home_area_only_days=("home_area_only_days", "sum"),
             insufficient_checkin_days=("insufficient_checkin_days", "sum"),
             short_attendance_span_days=("short_attendance_span_days", "sum"),
@@ -275,6 +293,72 @@ def build_company_monthly_risk_trend(monthly_trend: pd.DataFrame) -> pd.DataFram
     grouped["risk_priority_per_employee"] = grouped["risk_priority_score"] / grouped["employee_count"].clip(lower=1)
     grouped["risky_employee_rate"] = grouped["risky_employee_count"] / grouped["employee_count"].clip(lower=1)
     return grouped[columns].reset_index(drop=True)
+
+
+def _numeric_series(dataframe: pd.DataFrame, column: str, default: float = 0.0) -> pd.Series:
+    if column not in dataframe.columns:
+        return pd.Series(default, index=dataframe.index, dtype="float64")
+    return pd.to_numeric(dataframe[column], errors="coerce").fillna(default)
+
+
+def _first_available_numeric_series(dataframe: pd.DataFrame, columns: list[str], default: float = 0.0) -> pd.Series:
+    for column in columns:
+        if column in dataframe.columns:
+            return _numeric_series(dataframe, column, default=default)
+    return pd.Series(default, index=dataframe.index, dtype="float64")
+
+
+def build_employee_risk_source_breakdown(summary: pd.DataFrame) -> pd.DataFrame:
+    columns = ["employee_id", "employee_label", "department", "source", "score"]
+    if summary.empty:
+        return pd.DataFrame(columns=columns)
+
+    work = summary.copy()
+    if "employee_id" not in work.columns:
+        work["employee_id"] = ""
+    if "employee_label" not in work.columns:
+        work["employee_label"] = work["employee_id"].astype(str)
+    if "department" not in work.columns:
+        work["department"] = ""
+
+    total_risk = _first_available_numeric_series(work, ["異常風險分", "risk_score", "風險分數"])
+    home_only_score = _numeric_series(work, "僅居家附近軌跡天數") * 8
+    insufficient_score = _numeric_series(work, "打卡不足天數") * 5
+    short_hours_score = _numeric_series(work, "出勤時數過短天數") * 4
+    known_score = home_only_score + insufficient_score + short_hours_score
+    other_score = (total_risk - known_score).clip(lower=0)
+
+    source_frames = [
+        work.assign(source="全日居家", score=home_only_score),
+        work.assign(source="打卡不足", score=insufficient_score),
+        work.assign(source="工時過短", score=short_hours_score),
+        work.assign(source="其他異常", score=other_score),
+    ]
+    result = pd.concat(source_frames, ignore_index=True)
+    result["score"] = pd.to_numeric(result["score"], errors="coerce").fillna(0)
+    result = result.loc[result["score"] > 0, columns]
+    return result.sort_values(["employee_label", "source"]).reset_index(drop=True)
+
+
+def prepare_risk_review_quadrant(summary: pd.DataFrame) -> tuple[pd.DataFrame, float, float]:
+    columns = ["employee_id", "employee_label", "department", "異常風險分", "開發/覆核分", "綜合優先分", "marker_size"]
+    if summary.empty:
+        return pd.DataFrame(columns=columns), 0.0, 0.0
+
+    result = summary.copy()
+    if "employee_id" not in result.columns:
+        result["employee_id"] = ""
+    if "employee_label" not in result.columns:
+        result["employee_label"] = result["employee_id"].astype(str)
+    if "department" not in result.columns:
+        result["department"] = ""
+    result["異常風險分"] = _first_available_numeric_series(result, ["異常風險分", "risk_score", "風險分數"])
+    result["開發/覆核分"] = _first_available_numeric_series(result, ["開發/覆核分", "review_score", "需覆核分數"])
+    result["綜合優先分"] = _first_available_numeric_series(result, ["綜合優先分", "risk_priority_score", "風險優先分"])
+    result["marker_size"] = result["綜合優先分"].clip(lower=1)
+    avg_review = float(result["開發/覆核分"].mean()) if not result.empty else 0.0
+    avg_risk = float(result["異常風險分"].mean()) if not result.empty else 0.0
+    return result[columns].reset_index(drop=True), avg_review, avg_risk
 
 
 def build_employee_monthly_warming(monthly_trend: pd.DataFrame, latest_month: str | None = None) -> pd.DataFrame:

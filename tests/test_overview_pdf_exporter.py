@@ -79,7 +79,11 @@ def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
                 "低信心點數": 1,
                 "僅居家附近軌跡天數": 1,
                 "風險優先分": 30.0,
+                "綜合優先分": 30.0,
+                "異常風險分": 9.0,
+                "開發/覆核分": 3.0,
                 "平均風險優先分": 15.0,
+                "平均綜合優先分": 15.0,
                 "平均風險率": 4.0,
                 "異常率": 0.2,
                 "超時出勤率": 0.1,
@@ -116,6 +120,8 @@ def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
                 "risky_employee_count": 1,
                 "risky_employee_rate": 1.0,
                 "risk_priority_per_day": 15.0,
+                "risk_score": 9.0,
+                "review_score": 3.0,
                 "high_risk_event_count": 2,
                 "review_event_count": 3,
                 "home_area_only_days": 1,
@@ -141,13 +147,17 @@ def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
 
     assert context.period_label == "2026-01-01 ~ 2026-01-31"
     assert len(context.charts) >= 10
-    assert context.rankings[0][1][0] == ("HS01 李小明", "2")
+    assert context.rankings[0][1][0] == ("HS01 李小明", "30.00")
     assert "員工" in context.summary_table.columns
+    assert "總時數" in context.summary_table.columns
+    assert "僅居家天數" in context.summary_table.columns
+    assert context.summary_table.loc[0, "總時數"] == 8.5
+    assert context.summary_table.loc[0, "僅居家天數"] == 1
 
     scatter_figures = [
         figure
         for figure in rendered_figures
-        if figure.layout.title.text in {"風險率 vs 異常率", "月申請里程散點圖"}
+        if figure.layout.title.text in {"異常風險分 x 開發/覆核分象限", "月申請里程散點圖"}
     ]
     assert len(scatter_figures) == 2
     for figure in scatter_figures:

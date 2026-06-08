@@ -11,7 +11,11 @@ from typing import Callable, Iterable
 import pandas as pd
 import plotly.express as px
 
-from risk_presentation import prepare_month_axis_for_pdf
+from risk_presentation import (
+    build_employee_risk_source_breakdown,
+    prepare_month_axis_for_pdf,
+    prepare_risk_review_quadrant,
+)
 
 
 ImageRenderer = Callable[[object, int, int, int], bytes]
@@ -91,6 +95,15 @@ def _positive_range(series: pd.Series, *, factor: float = 1.12) -> list[float]:
     return [0, max(float(max_value) * factor, 1.0)]
 
 
+def _ensure_numeric_column(dataframe: pd.DataFrame, column: str, fallback: str | None = None) -> None:
+    if column in dataframe.columns:
+        dataframe[column] = pd.to_numeric(dataframe[column], errors="coerce").fillna(0)
+    elif fallback and fallback in dataframe.columns:
+        dataframe[column] = pd.to_numeric(dataframe[fallback], errors="coerce").fillna(0)
+    else:
+        dataframe[column] = 0
+
+
 def _format_metric(value: object, value_type: str = "float") -> str:
     if pd.isna(value):
         return "-"
@@ -126,6 +139,8 @@ def _build_overview_figures(
             max_months=12,
             max_ticks=12,
         )
+        _ensure_numeric_column(company_monthly, "risk_score")
+        _ensure_numeric_column(company_monthly, "review_score")
         company_line = company_monthly.melt(
             id_vars=["year_month", "month_label", "month_index"],
             value_vars=["risk_priority_per_day", "risky_employee_rate"],
@@ -184,19 +199,13 @@ def _build_overview_figures(
         )
         charts.append(("風險月趨勢：納入員工數 / 需優先追查員工數", fig_employee_count, 420))
 
-        company_monthly_view = company_monthly.rename(
-            columns={
-                "high_risk_event_count": "高風險點數",
-                "review_event_count": "需覆核點數",
-                "home_area_only_days": "僅居家附近天數",
-            }
-        )
+        company_monthly_view = company_monthly.rename(columns={"risk_score": "異常風險分", "review_score": "開發/覆核分"})
         fig_company_stack = px.bar(
             company_monthly_view,
             x="month_index",
-            y=["高風險點數", "需覆核點數", "僅居家附近天數"],
+            y=["異常風險分", "開發/覆核分"],
             barmode="group",
-            labels={"value": "數量", "variable": "指標"},
+            labels={"value": "分數", "variable": "指標"},
         )
         fig_company_stack.update_xaxes(
             title_text="月份",
@@ -209,13 +218,17 @@ def _build_overview_figures(
         )
         _apply_static_chart_layout(
             fig_company_stack,
-            "月風險類型分布",
+            "月分數拆解",
             height=420,
             margin=dict(l=80, r=140, t=58, b=74),
         )
-        charts.append(("月風險類型分布", fig_company_stack, 420))
+        charts.append(("月分數拆解", fig_company_stack, 420))
 
     if not overview_summary.empty:
+        overview_summary = overview_summary.copy()
+        _ensure_numeric_column(overview_summary, "綜合優先分", "風險優先分")
+        _ensure_numeric_column(overview_summary, "異常風險分", "風險分數")
+        _ensure_numeric_column(overview_summary, "開發/覆核分", "需覆核點數")
         fig_km = px.bar(
             overview_summary.sort_values("總計預估里程", ascending=True),
             x="總計預估里程",
@@ -229,23 +242,29 @@ def _build_overview_figures(
         fig_km.update_xaxes(range=_positive_range(overview_summary["總計預估里程"]))
         charts.append(("各業務總計預估里程比較", fig_km, 520))
 
-        scatter_overview = overview_summary.copy()
-        scatter_overview["需覆核點數標記"] = scatter_overview["需覆核點數"].fillna(0).clip(lower=1)
+        scatter_overview, avg_review_score, avg_risk_score = prepare_risk_review_quadrant(overview_summary)
         fig_scatter = px.scatter(
             scatter_overview,
-            x="異常率",
-            y="平均風險率",
-            size="需覆核點數標記",
+            x="開發/覆核分",
+            y="異常風險分",
+            size="marker_size",
             color="department",
             text="employee_id",
             hover_name="employee_label",
-            labels={"異常率": "異常率", "平均風險率": "平均風險率", "department": "部門"},
+            labels={"開發/覆核分": "開發/覆核分", "異常風險分": "異常風險分", "department": "部門"},
         )
-        _apply_static_chart_layout(fig_scatter, "風險率 vs 異常率", height=420, margin=dict(l=80, r=180, t=64, b=74))
+        _apply_static_chart_layout(
+            fig_scatter,
+            "異常風險分 x 開發/覆核分象限",
+            height=420,
+            margin=dict(l=80, r=180, t=64, b=74),
+        )
         _show_scatter_employee_labels(fig_scatter)
-        fig_scatter.update_xaxes(range=_positive_range(scatter_overview["異常率"], factor=1.18))
-        fig_scatter.update_yaxes(range=_positive_range(scatter_overview["平均風險率"], factor=1.18))
-        charts.append(("風險率 vs 異常率", fig_scatter, 420))
+        fig_scatter.update_xaxes(range=_positive_range(scatter_overview["開發/覆核分"], factor=1.18))
+        fig_scatter.update_yaxes(range=_positive_range(scatter_overview["異常風險分"], factor=1.18))
+        fig_scatter.add_vline(x=avg_review_score, line_width=2, line_dash="dash", line_color="#94a3b8")
+        fig_scatter.add_hline(y=avg_risk_score, line_width=2, line_dash="dash", line_color="#94a3b8")
+        charts.append(("異常風險分 x 開發/覆核分象限", fig_scatter, 420))
 
         fig_hours = px.bar(
             overview_summary.sort_values("總出勤時數", ascending=True),
@@ -271,31 +290,39 @@ def _build_overview_figures(
         fig_subsidy.update_layout(xaxis_tickangle=-30)
         charts.append(("財務補貼總覽", fig_subsidy, 420))
 
-        fig_risk_rank = px.bar(
-            overview_summary.sort_values("風險優先分", ascending=True),
-            x=["需覆核點數", "高風險點數", "低信心點數", "僅居家附近軌跡天數"],
-            y="employee_label",
-            barmode="group",
-            orientation="h",
-            labels={"employee_label": "員工", "value": "數量", "variable": "指標"},
-        )
-        _apply_static_chart_layout(fig_risk_rank, "員工風險排名", height=520, margin=dict(l=170, r=180, t=58, b=68))
-        fig_risk_rank.update_xaxes(
-            range=_positive_range(overview_summary[["需覆核點數", "高風險點數", "低信心點數", "僅居家附近軌跡天數"]].stack())
-        )
-        charts.append(("員工風險排名", fig_risk_rank, 520))
+        risk_source_breakdown = build_employee_risk_source_breakdown(overview_summary)
+        if not risk_source_breakdown.empty:
+            employee_order = (
+                overview_summary.sort_values("綜合優先分", ascending=True)["employee_label"]
+                .dropna()
+                .drop_duplicates()
+                .tolist()
+            )
+            fig_risk_rank = px.bar(
+                risk_source_breakdown,
+                x="score",
+                y="employee_label",
+                color="source",
+                barmode="stack",
+                orientation="h",
+                category_orders={"employee_label": employee_order},
+                labels={"employee_label": "員工", "score": "異常風險分", "source": "來源"},
+            )
+            _apply_static_chart_layout(fig_risk_rank, "員工風險來源拆解", height=520, margin=dict(l=170, r=180, t=58, b=68))
+            fig_risk_rank.update_xaxes(range=_positive_range(risk_source_breakdown["score"]))
+            charts.append(("員工風險來源拆解", fig_risk_rank, 520))
 
         fig_risk_score = px.bar(
-            overview_summary.sort_values("風險優先分", ascending=True),
-            x="風險優先分",
+            overview_summary.sort_values("綜合優先分", ascending=True),
+            x="綜合優先分",
             y="employee_label",
             color="department",
             orientation="h",
-            labels={"employee_label": "員工", "風險優先分": "風險優先分", "department": "部門"},
+            labels={"employee_label": "員工", "綜合優先分": "綜合優先分", "department": "部門"},
         )
-        _apply_static_chart_layout(fig_risk_score, "風險優先分排名", height=500, margin=dict(l=170, r=180, t=58, b=68))
-        fig_risk_score.update_xaxes(range=_positive_range(overview_summary["風險優先分"]))
-        charts.append(("風險優先分排名", fig_risk_score, 500))
+        _apply_static_chart_layout(fig_risk_score, "綜合優先分排名", height=500, margin=dict(l=170, r=180, t=58, b=68))
+        fig_risk_score.update_xaxes(range=_positive_range(overview_summary["綜合優先分"]))
+        charts.append(("綜合優先分排名", fig_risk_score, 500))
 
     if not overview_claim_employee.empty:
         claim_bar_df = overview_claim_employee.melt(
@@ -372,25 +399,39 @@ def build_overview_pdf_context(
     end_date: object,
     image_renderer: ImageRenderer | None = None,
 ) -> OverviewPdfContext:
+    overview_summary = overview_summary.copy()
+    fallback_columns = {
+        "綜合優先分": "風險優先分",
+        "平均綜合優先分": "平均風險優先分",
+        "異常風險分": "風險分數",
+        "高風險打卡次數": "高風險點數",
+        "未配對打卡次數": "需覆核點數",
+    }
+    for target, source in fallback_columns.items():
+        if target not in overview_summary.columns:
+            overview_summary[target] = overview_summary[source] if source in overview_summary.columns else 0
+    if "開發/覆核分" not in overview_summary.columns:
+        overview_summary["開發/覆核分"] = 0
+
     metrics = [
         ("納入比較員工數", f"{len(overview_summary)}"),
         ("全員總計預估里程", _format_metric(overview_summary["總計預估里程"].sum() if not overview_summary.empty else 0, "km")),
         ("全員總計公務里程", _format_metric(overview_summary["總計預估公務里程"].sum() if not overview_summary.empty else 0, "km")),
-        ("需覆核點數", _format_metric(overview_summary["需覆核點數"].fillna(0).sum() if not overview_summary.empty else 0, "int")),
-        ("高風險點數", _format_metric(overview_summary["高風險點數"].fillna(0).sum() if not overview_summary.empty else 0, "int")),
+        ("開發/覆核分", _format_metric(overview_summary["開發/覆核分"].fillna(0).sum() if not overview_summary.empty else 0, "float")),
+        ("未配對打卡次數", _format_metric(overview_summary["未配對打卡次數"].fillna(0).sum() if not overview_summary.empty else 0, "int")),
         ("平均異常率", _format_metric(overview_summary["異常率"].mean() if not overview_summary.empty else 0, "percent")),
         ("平均超時率", _format_metric(overview_summary["超時出勤率"].mean() if not overview_summary.empty else 0, "percent")),
-        ("平均風險優先分", _format_metric(overview_summary["平均風險優先分"].mean() if not overview_summary.empty else 0, "float")),
+        ("平均綜合優先分", _format_metric(overview_summary["平均綜合優先分"].mean() if not overview_summary.empty else 0, "float")),
     ]
 
-    high_risk_rank = overview_summary.sort_values(["高風險點數", "風險優先分"], ascending=[False, False]) if not overview_summary.empty else overview_summary
-    review_rank = overview_summary.sort_values(["需覆核點數", "風險優先分"], ascending=[False, False]) if not overview_summary.empty else overview_summary
+    priority_rank = overview_summary.sort_values(["綜合優先分", "平均綜合優先分"], ascending=[False, False]) if not overview_summary.empty else overview_summary
+    unmatched_rank = overview_summary.sort_values(["未配對打卡次數", "綜合優先分"], ascending=[False, False]) if not overview_summary.empty else overview_summary
     home_rank = overview_summary.sort_values(["僅居家附近軌跡天數", "風險優先分"], ascending=[False, False]) if not overview_summary.empty else overview_summary
     claim_diff_rank = overview_claim_employee.sort_values("差異率絕對值", ascending=False) if not overview_claim_employee.empty else overview_claim_employee
 
     rankings = [
-        ("高風險員工 Top 5", _ranking_rows(high_risk_rank, "employee_label", "高風險點數", "int")),
-        ("需覆核點數 Top 5", _ranking_rows(review_rank, "employee_label", "需覆核點數", "int")),
+        ("綜合優先分 Top 5", _ranking_rows(priority_rank, "employee_label", "綜合優先分", "float")),
+        ("未配對打卡 Top 5", _ranking_rows(unmatched_rank, "employee_label", "未配對打卡次數", "int")),
         ("僅居家附近 Top 5", _ranking_rows(home_rank, "employee_label", "僅居家附近軌跡天數", "int")),
         ("申報差異 Top 5", _ranking_rows(claim_diff_rank, "employee_label", "差異率絕對值", "percent")),
     ]
@@ -405,18 +446,26 @@ def build_overview_pdf_context(
         "employee_label",
         "department",
         "出勤天數",
+        "總出勤時數",
         "總打卡次數",
         "總GPS點數",
         "總計預估里程",
-        "需覆核點數",
-        "高風險點數",
-        "低信心點數",
-        "平均風險優先分",
+        "開發/覆核分",
+        "未配對打卡次數",
+        "高風險打卡次數",
+        "平均綜合優先分",
+        "異常風險分",
+        "僅居家附近軌跡天數",
         "主要風險原因",
-        "追查提示",
     ]
     summary_table = overview_summary[[column for column in summary_columns if column in overview_summary.columns]].rename(
-        columns={"employee_id": "員工編號", "employee_label": "員工", "department": "部門"}
+        columns={
+            "employee_id": "員工編號",
+            "employee_label": "員工",
+            "department": "部門",
+            "總出勤時數": "總時數",
+            "僅居家附近軌跡天數": "僅居家天數",
+        }
     )
 
     return OverviewPdfContext(

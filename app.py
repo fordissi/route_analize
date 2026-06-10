@@ -174,6 +174,15 @@ st.markdown(
         box-shadow: 0 10px 26px rgba(15,23,42,0.05);
         overflow-wrap: anywhere;
     }
+    .candidate-card--review {
+        border-left-color: #d97706;
+        background: linear-gradient(90deg, #fffbeb 0%, rgba(255,255,255,0.98) 18%);
+    }
+    .candidate-card--high {
+        border-left-color: #dc2626;
+        background: linear-gradient(90deg, #fef2f2 0%, rgba(255,255,255,0.98) 20%);
+        box-shadow: 0 12px 30px rgba(220,38,38,0.10);
+    }
     .candidate-title {
         font-weight: 700;
         color: #0f172a;
@@ -186,6 +195,122 @@ st.markdown(
         line-height: 1.45;
         margin-bottom: 0.5rem;
         overflow-wrap: anywhere;
+    }
+    .candidate-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.7rem;
+    }
+    .candidate-card-titleblock {
+        min-width: 0;
+    }
+    .candidate-card-meta {
+        color: #64748b;
+        font-size: 0.84rem;
+        line-height: 1.35;
+        margin-top: 0.12rem;
+        overflow-wrap: anywhere;
+    }
+    .candidate-card-status {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 0.18rem 0.58rem;
+        font-size: 0.78rem;
+        font-weight: 800;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+    .candidate-card-status--normal {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .candidate-card-status--review {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    .candidate-card-status--high {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+    .candidate-card-status--low {
+        background: #e0f2fe;
+        color: #0369a1;
+    }
+    .candidate-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.42rem;
+        margin: 0.45rem 0 0.65rem 0;
+    }
+    .candidate-chip {
+        background: #f8fafc;
+        border: 1px solid rgba(15,23,42,0.08);
+        border-radius: 8px;
+        padding: 0.42rem 0.5rem;
+        min-width: 96px;
+        flex: 1 1 96px;
+    }
+    .candidate-chip-label {
+        color: #64748b;
+        font-size: 0.72rem;
+        font-weight: 750;
+        line-height: 1.25;
+    }
+    .candidate-chip-value {
+        color: #0f172a;
+        font-size: 0.95rem;
+        font-weight: 850;
+        line-height: 1.2;
+        margin-top: 0.1rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .candidate-decision {
+        border: 1px solid rgba(15,23,42,0.08);
+        border-radius: 10px;
+        padding: 0.68rem 0.72rem;
+        margin: 0.55rem 0 0.7rem 0;
+        background: #ffffff;
+    }
+    .candidate-decision-label {
+        color: #64748b;
+        font-size: 0.75rem;
+        font-weight: 800;
+        line-height: 1.25;
+        margin-bottom: 0.28rem;
+    }
+    .candidate-decision-main {
+        color: #0f172a;
+        font-weight: 800;
+        line-height: 1.38;
+    }
+    .candidate-evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 0.48rem;
+        margin-top: 0.45rem;
+    }
+    .candidate-evidence-item {
+        color: #475569;
+        font-size: 0.86rem;
+        line-height: 1.42;
+        background: #f8fafc;
+        border: 1px solid rgba(15,23,42,0.06);
+        border-radius: 8px;
+        padding: 0.45rem 0.52rem;
+    }
+    .candidate-risk-note {
+        color: #0f172a;
+        background: #fff7ed;
+        border: 1px solid rgba(217,119,6,0.24);
+        border-radius: 8px;
+        padding: 0.5rem 0.58rem;
+        margin-top: 0.52rem;
+        font-size: 0.88rem;
+        line-height: 1.45;
     }
     .candidate-list {
         margin: 0.35rem 0 0 0;
@@ -232,6 +357,31 @@ st.markdown(
         min-height: 300px;
         box-shadow: 0 10px 24px rgba(15,23,42,0.05);
         overflow-wrap: anywhere;
+        position: relative;
+    }
+    .weekly-day-card--clear {
+        border-top-color: #0f766e;
+    }
+    .weekly-day-card--watch {
+        border-top-color: #d97706;
+        background: linear-gradient(180deg, #fffbeb 0%, rgba(255,255,255,0.98) 32%);
+    }
+    .weekly-day-card--alert {
+        border-top-color: #dc2626;
+        background: linear-gradient(180deg, #fef2f2 0%, rgba(255,255,255,0.98) 34%);
+        box-shadow: 0 14px 34px rgba(220,38,38,0.12);
+    }
+    .weekly-day-card--critical {
+        border-top-color: #991b1b;
+        background: linear-gradient(180deg, #fff1f2 0%, rgba(255,255,255,0.98) 36%);
+        box-shadow: 0 16px 40px rgba(153,27,27,0.16);
+    }
+    .weekly-day-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.45rem;
     }
     .weekly-day-title {
         font-weight: 700;
@@ -244,6 +394,93 @@ st.markdown(
         font-size: 0.9rem;
         line-height: 1.45;
         margin-bottom: 0.55rem;
+    }
+    .weekly-status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 0.18rem 0.58rem;
+        font-size: 0.78rem;
+        font-weight: 800;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+    .weekly-status-pill--clear {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .weekly-status-pill--watch {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    .weekly-status-pill--alert {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+    .weekly-status-pill--critical {
+        background: #991b1b;
+        color: #ffffff;
+    }
+    .weekly-kpi-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.45rem;
+        margin: 0.65rem 0 0.75rem 0;
+    }
+    .weekly-kpi {
+        background: #f8fafc;
+        border: 1px solid rgba(15,23,42,0.07);
+        border-radius: 8px;
+        padding: 0.45rem 0.5rem;
+        min-width: 0;
+    }
+    .weekly-kpi-label {
+        color: #64748b;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+    .weekly-kpi-value {
+        color: #0f172a;
+        font-size: 0.96rem;
+        font-weight: 800;
+        line-height: 1.2;
+        margin-top: 0.12rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .weekly-rate-meter {
+        margin: 0.45rem 0 0.65rem 0;
+    }
+    .weekly-rate-meter__label {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        color: #475569;
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-bottom: 0.28rem;
+    }
+    .weekly-rate-meter__track {
+        height: 8px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+    .weekly-rate-meter__fill {
+        height: 100%;
+        border-radius: 999px;
+        background: #0f766e;
+        min-width: 2px;
+    }
+    .weekly-rate-meter__fill--watch {
+        background: #d97706;
+    }
+    .weekly-rate-meter__fill--alert {
+        background: #dc2626;
+    }
+    .weekly-rate-meter__fill--critical {
+        background: #991b1b;
     }
     .weekly-day-list {
         margin: 0.3rem 0 0 0;
@@ -383,6 +620,135 @@ st.markdown(
         line-height: 1.45;
         margin-top: 0.65rem;
         overflow-wrap: anywhere;
+    }
+    .audit-status-panel {
+        background: rgba(255,255,255,0.98);
+        border: 1px solid rgba(15,23,42,0.08);
+        border-top: 4px solid #0f766e;
+        border-radius: 12px;
+        padding: 0.95rem 1rem;
+        margin: 0.75rem 0 1rem 0;
+        box-shadow: 0 10px 24px rgba(15,23,42,0.05);
+        overflow-wrap: anywhere;
+    }
+    .audit-status-panel--watch {
+        border-top-color: #d97706;
+        background: linear-gradient(180deg, #fffbeb 0%, rgba(255,255,255,0.98) 36%);
+    }
+    .audit-status-panel--alert {
+        border-top-color: #dc2626;
+        background: linear-gradient(180deg, #fef2f2 0%, rgba(255,255,255,0.98) 38%);
+    }
+    .audit-status-panel--critical {
+        border-top-color: #991b1b;
+        background: linear-gradient(180deg, #fff1f2 0%, rgba(255,255,255,0.98) 40%);
+        box-shadow: 0 14px 34px rgba(153,27,27,0.14);
+    }
+    .audit-status-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.75rem;
+        margin-bottom: 0.65rem;
+    }
+    .audit-status-title {
+        color: #0f172a;
+        font-size: 1rem;
+        font-weight: 800;
+        line-height: 1.35;
+    }
+    .audit-status-subtitle {
+        color: #64748b;
+        font-size: 0.86rem;
+        line-height: 1.45;
+        margin-top: 0.15rem;
+    }
+    .audit-status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 0.18rem 0.6rem;
+        font-size: 0.78rem;
+        font-weight: 800;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+    .audit-status-pill--clear {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .audit-status-pill--watch {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    .audit-status-pill--alert {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+    .audit-status-pill--critical {
+        background: #991b1b;
+        color: #ffffff;
+    }
+    .audit-kpi-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+        gap: 0.55rem;
+        margin-top: 0.65rem;
+    }
+    .audit-kpi {
+        background: #f8fafc;
+        border: 1px solid rgba(15,23,42,0.07);
+        border-radius: 8px;
+        padding: 0.55rem 0.6rem;
+        min-width: 0;
+    }
+    .audit-kpi-label {
+        color: #64748b;
+        font-size: 0.74rem;
+        font-weight: 750;
+        line-height: 1.25;
+    }
+    .audit-kpi-value {
+        color: #0f172a;
+        font-size: 1.1rem;
+        font-weight: 850;
+        line-height: 1.2;
+        margin-top: 0.14rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .audit-meter {
+        margin-top: 0.6rem;
+    }
+    .audit-meter-label {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        color: #475569;
+        font-size: 0.82rem;
+        font-weight: 750;
+        margin-bottom: 0.28rem;
+    }
+    .audit-meter-track {
+        height: 8px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+    .audit-meter-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: #0f766e;
+        min-width: 2px;
+    }
+    .audit-meter-fill--watch {
+        background: #d97706;
+    }
+    .audit-meter-fill--alert {
+        background: #dc2626;
+    }
+    .audit-meter-fill--critical {
+        background: #991b1b;
     }
     .drilldown-detail-list {
         display: grid;
@@ -1262,6 +1628,31 @@ st.markdown(
             -webkit-print-color-adjust: exact !important;
         }
 
+        .weekly-day-card--watch,
+        .weekly-day-card--alert,
+        .weekly-day-card--critical,
+        .audit-status-panel--watch,
+        .audit-status-panel--alert,
+        .audit-status-panel--critical {
+            border-width: 1.5pt !important;
+        }
+
+        .weekly-status-pill,
+        .weekly-kpi,
+        .weekly-rate-meter__track,
+        .audit-status-pill,
+        .audit-kpi,
+        .audit-meter-track {
+            border: 0.5pt solid #000000 !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+        }
+
+        .weekly-rate-meter__fill,
+        .audit-meter-fill {
+            background: #555555 !important;
+        }
+
         .modebar,
         .plotly-notifier {
             display: none !important;
@@ -1378,6 +1769,109 @@ def format_metric_value(value: object, value_type: str = "int") -> str:
         return "-" if pd.isna(numeric) else f"{float(numeric):.2f} km"
     numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
     return "-" if pd.isna(numeric) else f"{int(round(float(numeric)))}"
+
+
+def format_percent_text(value: object) -> str:
+    numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+    return "" if pd.isna(numeric) else f"{float(numeric):.1%}"
+
+
+def weekly_card_status(rate: object, gps_count: object, priority_score: object) -> dict[str, object]:
+    rate_value = pd.to_numeric(pd.Series([rate]), errors="coerce").iloc[0]
+    gps_value = pd.to_numeric(pd.Series([gps_count]), errors="coerce").iloc[0]
+    priority_value = pd.to_numeric(pd.Series([priority_score]), errors="coerce").iloc[0]
+    rate_float = 0.0 if pd.isna(rate_value) else float(rate_value)
+    gps_int = 0 if pd.isna(gps_value) else int(gps_value)
+    priority_float = 0.0 if pd.isna(priority_value) else float(priority_value)
+
+    if priority_float >= 40 or rate_float >= 0.5:
+        key, label = "critical", "優先追查"
+    elif priority_float >= 20 or rate_float >= 0.25:
+        key, label = "alert", "異常偏高"
+    elif priority_float >= 8 or rate_float > 0:
+        key, label = "watch", "需留意"
+    else:
+        key, label = "clear", "正常"
+
+    if gps_int <= 0 and priority_float > 0:
+        key, label = "critical", "無GPS需查"
+
+    return {
+        "key": key,
+        "label": label,
+        "card_class": f"weekly-day-card--{key}",
+        "pill_class": f"weekly-status-pill--{key}",
+        "meter_class": "" if key == "clear" else f"weekly-rate-meter__fill--{key}",
+    }
+
+
+def audit_status(rate: object, gps_count: object, priority_score: object) -> dict[str, object]:
+    status = weekly_card_status(rate, gps_count, priority_score)
+    key = str(status.get("key") or "clear")
+    return {
+        "key": key,
+        "label": status.get("label", "正常"),
+        "panel_class": "" if key == "clear" else f"audit-status-panel--{key}",
+        "pill_class": f"audit-status-pill--{key}",
+        "meter_class": "" if key == "clear" else f"audit-meter-fill--{key}",
+    }
+
+
+def render_audit_status_panel(
+    title: str,
+    subtitle: str,
+    *,
+    rate_label: str,
+    rate_value: object,
+    rate_numerator: object,
+    rate_denominator: object,
+    priority_score: object,
+    metrics: list[tuple[str, object, str]],
+) -> None:
+    gps_count = pd.to_numeric(pd.Series([rate_denominator]), errors="coerce").iloc[0]
+    gps_int = 0 if pd.isna(gps_count) else int(gps_count)
+    rate_numeric = pd.to_numeric(pd.Series([rate_value]), errors="coerce").iloc[0]
+    rate_float = 0.0 if pd.isna(rate_numeric) else float(rate_numeric)
+    priority_numeric = pd.to_numeric(pd.Series([priority_score]), errors="coerce").iloc[0]
+    priority_float = 0.0 if pd.isna(priority_numeric) else float(priority_numeric)
+    status = audit_status(rate_float, gps_int, priority_float)
+    rate_text = f"{rate_float:.1%}" if gps_int > 0 else "無GPS"
+    meter_width = min(max(rate_float * 100, 0), 100)
+    if gps_int <= 0 and priority_float > 0:
+        meter_width = 100
+    metrics_html = "".join(
+        (
+            '<div class="audit-kpi">'
+            f'<div class="audit-kpi-label">{html_lib.escape(label)}</div>'
+            f'<div class="audit-kpi-value">{html_lib.escape(format_metric_value(value, value_type))}</div>'
+            "</div>"
+        )
+        for label, value, value_type in metrics
+    )
+    st.markdown(
+        f"""
+        <div class="audit-status-panel {status['panel_class']}">
+            <div class="audit-status-header">
+                <div>
+                    <div class="audit-status-title">{html_lib.escape(title)}</div>
+                    <div class="audit-status-subtitle">{html_lib.escape(subtitle)}</div>
+                </div>
+                <span class="audit-status-pill {status['pill_class']}">{html_lib.escape(str(status['label']))}</span>
+            </div>
+            <div class="audit-meter" aria-label="{html_lib.escape(rate_label)} {html_lib.escape(rate_text)}">
+                <div class="audit-meter-label">
+                    <span>{html_lib.escape(rate_label)}</span>
+                    <span>{html_lib.escape(str(rate_numerator))} / {gps_int}（{html_lib.escape(rate_text)}）</span>
+                </div>
+                <div class="audit-meter-track">
+                    <div class="audit-meter-fill {status['meter_class']}" style="width: {meter_width:.0f}%;"></div>
+                </div>
+            </div>
+            <div class="audit-kpi-row">{metrics_html}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_risk_focus_band(title: str, metrics: list[tuple[str, object, str]], note: str = "") -> None:
@@ -2496,6 +2990,8 @@ def load_results():
         "risk_priority_rate",
         "risk_rate",
         "review_event_count",
+        "abnormal_gps_event_count",
+        "abnormal_gps_event_rate",
         "high_risk_event_count",
         "low_confidence_event_count",
         "unmatched_event_count",
@@ -2525,6 +3021,8 @@ def load_results():
         "risk_rate",
         "review_rate",
         "review_event_count",
+        "abnormal_gps_event_count",
+        "abnormal_gps_event_rate",
         "high_risk_event_count",
         "low_confidence_event_count",
         "unmatched_event_count",
@@ -2560,6 +3058,8 @@ def load_results():
         "risk_priority_rate",
         "risk_rate",
         "review_event_count",
+        "abnormal_gps_event_count",
+        "abnormal_gps_event_rate",
         "high_risk_event_count",
         "low_confidence_event_count",
         "unmatched_event_count",
@@ -2584,6 +3084,8 @@ def load_results():
         "risk_rate",
         "review_rate",
         "review_event_count",
+        "abnormal_gps_event_count",
+        "abnormal_gps_event_rate",
         "high_risk_event_count",
         "low_confidence_event_count",
         "unmatched_event_count",
@@ -3214,6 +3716,9 @@ def build_weekly_summary_cards(
             else {}
         )
         review_count = int(sum(risk_counts.get(level, 0) for level in [REVIEW_LABEL, HIGH_RISK_LABEL]))
+        gps_event_count = int(day_events["gps_lat"].notna().sum()) if "gps_lat" in day_events.columns else 0
+        abnormal_gps_event_count = review_count
+        abnormal_gps_event_rate = abnormal_gps_event_count / max(gps_event_count, 1)
         raw_risk_score_total = float(pd.to_numeric(day_events.get("risk_score", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()) if not day_events.empty else 0.0
         risk_priority_total = raw_risk_score_total
         if not day_risk.empty and "risk_priority_score" in day_risk.columns:
@@ -3240,7 +3745,9 @@ def build_weekly_summary_cards(
                 "date": current_date,
                 "label": get_weekday_label(current_date),
                 "event_count": int(len(day_events)),
-                "gps_event_count": int(day_events["gps_lat"].notna().sum()) if "gps_lat" in day_events.columns else 0,
+                "gps_event_count": gps_event_count,
+                "abnormal_gps_event_count": abnormal_gps_event_count,
+                "abnormal_gps_event_rate": abnormal_gps_event_rate,
                 "review_count": review_count,
                 "risk_score": raw_risk_score_total,
                 "risk_priority_score": risk_priority_total,
@@ -3313,11 +3820,49 @@ def render_weekly_summary_cards(cards: list[dict[str, object]]) -> None:
         prospect_text = "、".join(
             f"{item['name']} x {item['count']}" for item in v3_categories.get("prospect_appearances", [])
         ) or "無"
+        abnormal_count = int(card.get("abnormal_gps_event_count", 0) or 0)
+        gps_count = int(card.get("gps_event_count", 0) or 0)
+        rate = float(card.get("abnormal_gps_event_rate", 0) or 0)
+        priority_score = float(card.get("risk_priority_score", 0) or 0)
+        risk_score = float(card.get("risk_score", 0) or 0)
+        review_count = int(card.get("review_count", 0) or 0)
+        status = weekly_card_status(rate, gps_count, priority_score)
+        rate_text = f"{rate:.1%}" if gps_count > 0 else "無GPS"
+        meter_width = min(max(rate * 100, 0), 100)
+        if gps_count <= 0 and priority_score > 0:
+            meter_width = 100
         html = f"""
-        <div class="weekly-day-card">
-            <div class="weekly-day-title">{card['label']}</div>
-            <div class="weekly-day-sub">{card['date']} | 打卡 {card['event_count']} 點 / GPS {card['gps_event_count']} 點</div>
-            <div class="candidate-sub">風險優先分：{float(card.get('risk_priority_score', 0)):.0f} / 原始分數：{float(card.get('risk_score', 0)):.0f} / 需覆核點數：{card.get('review_count', 0)}</div>
+        <div class="weekly-day-card {status['card_class']}">
+            <div class="weekly-day-header">
+                <div>
+                    <div class="weekly-day-title">{html_lib.escape(str(card['label']))}</div>
+                    <div class="weekly-day-sub">{html_lib.escape(str(card['date']))} | 打卡 {int(card['event_count'])} 點 / GPS {gps_count} 點</div>
+                </div>
+                <span class="weekly-status-pill {status['pill_class']}">{html_lib.escape(str(status['label']))}</span>
+            </div>
+            <div class="weekly-rate-meter" aria-label="異常打卡佔比 {html_lib.escape(rate_text)}">
+                <div class="weekly-rate-meter__label">
+                    <span>異常打卡佔比</span>
+                    <span>{abnormal_count} / {gps_count}（{html_lib.escape(rate_text)}）</span>
+                </div>
+                <div class="weekly-rate-meter__track">
+                    <div class="weekly-rate-meter__fill {status['meter_class']}" style="width: {meter_width:.0f}%;"></div>
+                </div>
+            </div>
+            <div class="weekly-kpi-row">
+                <div class="weekly-kpi">
+                    <div class="weekly-kpi-label">綜合優先</div>
+                    <div class="weekly-kpi-value">{priority_score:.0f}</div>
+                </div>
+                <div class="weekly-kpi">
+                    <div class="weekly-kpi-label">異常風險</div>
+                    <div class="weekly-kpi-value">{risk_score:.0f}</div>
+                </div>
+                <div class="weekly-kpi">
+                    <div class="weekly-kpi-label">未配對</div>
+                    <div class="weekly-kpi-value">{review_count}</div>
+                </div>
+            </div>
             <div class="candidate-sub"><strong>主要問題：</strong>{html_lib.escape(str(card.get('primary_issue') or '未見明顯風險'))}</div>
             <div class="candidate-sub">風險摘要：{risk_summary_text}</div>
             <div class="candidate-sub"><strong>居家風險：</strong>住家1000公尺內 {int(v3_categories.get('home_within_1000_count', 0))} 次；當天只在家附近：{int(v3_categories.get('home_only_day', 0))}</div>
@@ -3741,6 +4286,19 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
             risk_level = panel.get("risk_level") or NORMAL_LABEL
             risk_score = float(panel.get("risk_score") or 0)
             review_score = float(panel.get("review_score") or 0)
+            priority_score = float(panel.get("priority_score") or panel.get("risk_priority") or 0)
+            candidate_card_class = ""
+            if risk_level == HIGH_RISK_LABEL or risk_score >= 8 or priority_score >= 20:
+                candidate_card_class = "candidate-card--high"
+            elif review_score > 0 or risk_score > 0 or priority_score >= 8:
+                candidate_card_class = "candidate-card--review"
+            status_class = "candidate-card-status--normal"
+            if risk_level == HIGH_RISK_LABEL or risk_score >= 8 or priority_score >= 20:
+                status_class = "candidate-card-status--high"
+            elif risk_level == REVIEW_LABEL or review_score > 0 or risk_score > 0 or priority_score >= 8:
+                status_class = "candidate-card-status--review"
+            elif risk_level == LOW_CONFIDENCE_LABEL:
+                status_class = "candidate-card-status--low"
             home_distance = panel.get("distance_from_home_m")
             home_bucket = (
                 format_distance(home_distance)
@@ -3810,9 +4368,9 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
                 risk_html += f'<div class="candidate-sub"><strong>證據摘要：</strong>{html_lib.escape(evidence_summary)}</div>'
             if risk_reason:
                 risk_html += '<div class="candidate-sub">覆核原因：展開查看完整證據</div>'
-            more_candidates_html = '<div class="candidate-sub">證據摘要與更多可能候選可展開查看</div>'
+            more_candidates_html = ""
             html = f"""
-            <div class="candidate-card">
+            <div class="candidate-card {candidate_card_class}">
                 <div class="candidate-title">#{panel['seq_no']} {panel['time']}</div>
                 <div class="candidate-sub">座標：{panel['lat']:.6f}, {panel['lon']:.6f}</div>
                 {decision_html}
@@ -3830,6 +4388,170 @@ def render_candidate_cards(candidate_panels: list[dict]) -> None:
                         st.markdown(f"**證據摘要**：{html_lib.escape(evidence_summary)}")
                     if risk_reason:
                         st.markdown(f"**覆核原因**：{html_lib.escape(risk_reason)}")
+                    st.markdown(
+                        f"<ol class=\"candidate-list\">{''.join(list_items)}</ol>",
+                        unsafe_allow_html=True,
+                    )
+
+
+def render_candidate_cards(candidate_panels: list[dict]) -> None:
+    if not candidate_panels:
+        st.info("沒有可判讀的 GPS 打卡點資料。")
+        return
+
+    st.markdown(
+        """
+        <div class="candidate-panel-header">
+            <div class="candidate-title">打卡點判定</div>
+            <div class="candidate-sub">依每個 GPS 打卡點列出住家距離、系統判定、最近既有客戶、最近醫院與潛在院所 Top3。</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    for row_panels in chunked(candidate_panels, 2):
+        columns = st.columns(2)
+        for column, panel in zip(columns, row_panels):
+            list_items = []
+            for item in panel["candidates"]:
+                tag_text = str(item.get("tag") or "")
+                tag_class = (
+                    "tag-client" if "既有" in tag_text or "摰" in tag_text
+                    else "tag-hospital" if "醫" in tag_text or "院" in tag_text or "恍" in tag_text
+                    else "tag-potential"
+                )
+                rank_suffix = f"（候選#{item['rank']}）" if int(item["rank"]) > 5 else ""
+                list_items.append(
+                    f"<li>{html_lib.escape(str(item['name']))}{rank_suffix} · {format_distance(item['distance'])} "
+                    f"<span class=\"{tag_class}\">{html_lib.escape(tag_text)}</span></li>"
+                )
+
+            risk_level = panel.get("risk_level") or NORMAL_LABEL
+            risk_score = float(panel.get("risk_score") or 0)
+            review_score = float(panel.get("review_score") or 0)
+            priority_score = float(panel.get("priority_score") or panel.get("risk_priority") or 0)
+            candidate_card_class = ""
+            status_class = "candidate-card-status--normal"
+            if risk_level == HIGH_RISK_LABEL or risk_score >= 8 or priority_score >= 20:
+                candidate_card_class = "candidate-card--high"
+                status_class = "candidate-card-status--high"
+            elif risk_level == REVIEW_LABEL or review_score > 0 or risk_score > 0 or priority_score >= 8:
+                candidate_card_class = "candidate-card--review"
+                status_class = "candidate-card-status--review"
+            elif risk_level == LOW_CONFIDENCE_LABEL:
+                status_class = "candidate-card-status--low"
+
+            home_distance = panel.get("distance_from_home_m")
+            home_bucket = (
+                format_distance(home_distance)
+                if home_distance is not None
+                else str(panel.get("home_distance_bucket") or "").strip() or "無住家距離資料"
+            )
+            location_class = str(panel.get("location_class") or "").strip()
+            home_only_hint = "是" if location_class in {"home_core", "home_edge"} else "否"
+            selected_visit_name = str(panel.get("selected_visit_name") or "未判定").strip()
+            selected_visit_type = str(panel.get("selected_visit_type") or "").strip()
+            selected_visit_distance = panel.get("selected_visit_distance_m")
+            selected_visit_distance_text = format_distance(selected_visit_distance) if selected_visit_distance is not None else "-"
+            decision_text = selected_visit_name
+            if selected_visit_distance is not None:
+                decision_text = f"{decision_text} {selected_visit_distance_text}"
+            decision_type = selected_visit_type or "未分類"
+            decision_tag_class = (
+                "tag-client" if location_class == "existing_client_visit"
+                else "tag-potential" if location_class == "unknown_field"
+                else "tag-risk-review" if location_class in {"home_core", "home_edge"}
+                else "tag-risk-normal"
+            )
+
+            prospect_top3_items = panel.get("prospect_top3_items") or []
+            suggested_top3 = "；".join(
+                f"{item['name']} · {format_distance(item['distance'])}"
+                for item in prospect_top3_items
+            ) or "500公尺內無潛在院所"
+            nearest_client_name = str(panel.get("nearest_client_name") or "").strip()
+            nearest_client_distance = panel.get("nearest_client_meter")
+            nearest_client_text = (
+                f"{nearest_client_name} {format_distance(nearest_client_distance)}"
+                if nearest_client_name and nearest_client_distance is not None
+                else "無最近既有客戶資料"
+            )
+            nearest_hospital_name = str(panel.get("nearest_hospital_only_name") or "").strip()
+            nearest_hospital_distance = panel.get("nearest_hospital_only_meter")
+            nearest_hospital_text = (
+                f"{nearest_hospital_name} {format_distance(nearest_hospital_distance)}"
+                if nearest_hospital_name and nearest_hospital_distance is not None
+                else "無最近醫院資料"
+            )
+
+            support_html = "".join(
+                (
+                    '<div class="candidate-evidence-item">'
+                    f'<strong>{html_lib.escape(label)}：</strong>{html_lib.escape(value)}'
+                    "</div>"
+                )
+                for label, value in [
+                    ("最近既有客戶", nearest_client_text),
+                    ("最近醫院", nearest_hospital_text),
+                    ("潛在院所Top3", suggested_top3),
+                ]
+            )
+
+            risk_reason = str(panel.get("risk_reason_text") or "").strip()
+            risk_focus = str(panel.get("event_risk_focus") or "").strip()
+            evidence_summary = str(panel.get("event_evidence_summary") or "").strip()
+            risk_html = ""
+            if risk_score > 0 and risk_focus:
+                risk_html += f'<div class="candidate-risk-note"><strong>追查重點：</strong>{html_lib.escape(risk_focus)}</div>'
+            if risk_score > 0 and evidence_summary:
+                risk_html += f'<div class="candidate-risk-note"><strong>證據摘要：</strong>{html_lib.escape(evidence_summary)}</div>'
+            if risk_reason:
+                risk_html += '<div class="candidate-sub">覆核原因：展開查看完整證據</div>'
+
+            html = f"""
+            <div class="candidate-card {candidate_card_class}">
+                <div class="candidate-card-header">
+                    <div class="candidate-card-titleblock">
+                        <div class="candidate-title">#{panel['seq_no']} {html_lib.escape(str(panel['time']))}</div>
+                        <div class="candidate-card-meta">座標：{panel['lat']:.6f}, {panel['lon']:.6f}</div>
+                    </div>
+                    <span class="candidate-card-status {status_class}">{html_lib.escape(str(risk_level))}</span>
+                </div>
+                <div class="candidate-chip-row">
+                    <div class="candidate-chip">
+                        <div class="candidate-chip-label">距離住家</div>
+                        <div class="candidate-chip-value">{html_lib.escape(home_bucket)}</div>
+                    </div>
+                    <div class="candidate-chip">
+                        <div class="candidate-chip-label">綜合優先</div>
+                        <div class="candidate-chip-value">{priority_score:.0f}</div>
+                    </div>
+                    <div class="candidate-chip">
+                        <div class="candidate-chip-label">異常/覆核</div>
+                        <div class="candidate-chip-value">{risk_score:.0f} / {review_score:.0f}</div>
+                    </div>
+                </div>
+                <div class="candidate-decision">
+                    <div class="candidate-decision-label">系統判定</div>
+                    <div class="candidate-decision-main">
+                        {html_lib.escape(decision_text)}
+                        <span class="{decision_tag_class}">{html_lib.escape(decision_type)}</span>
+                    </div>
+                    <div class="candidate-sub" style="margin:0.35rem 0 0 0;">本點在家附近：{html_lib.escape(home_only_hint)}</div>
+                </div>
+                <div class="candidate-evidence-grid">{support_html}</div>
+                {risk_html}
+            </div>
+            """
+            column.markdown(html, unsafe_allow_html=True)
+            if risk_reason or list_items or risk_focus or evidence_summary:
+                with column.expander(f"#{panel['seq_no']} 證據摘要與更多候選"):
+                    if risk_focus:
+                        st.markdown(f"**追查重點**：{risk_focus}")
+                    if evidence_summary:
+                        st.markdown(f"**證據摘要**：{evidence_summary}")
+                    if risk_reason:
+                        st.markdown(f"**覆核原因**：{risk_reason}")
                     st.markdown(
                         f"<ol class=\"candidate-list\">{''.join(list_items)}</ol>",
                         unsafe_allow_html=True,
@@ -3860,6 +4582,8 @@ def summarize_period(
         "risk_priority_rate",
         "risk_rate",
         "review_event_count",
+        "abnormal_gps_event_count",
+        "abnormal_gps_event_rate",
         "high_risk_event_count",
         "low_confidence_event_count",
         "unmatched_event_count",
@@ -3953,6 +4677,8 @@ def summarize_period(
         "risk_priority_rate",
         "risk_rate",
         "review_event_count",
+        "abnormal_gps_event_count",
+        "abnormal_gps_event_rate",
         "high_risk_event_count",
         "low_confidence_event_count",
         "unmatched_event_count",
@@ -3996,6 +4722,7 @@ def summarize_period(
                 "實際加班率": round(float(merged["actual_overtime_flag"].fillna(False).mean()), 4),
                 "總匹配院所次數": int(merged["matched_stop_count"].fillna(0).sum()),
                 "需覆核點數": int(merged["review_event_count"].sum()),
+                "異常打卡點數": int(merged["abnormal_gps_event_count"].sum()),
                 "高風險點數": int(merged["high_risk_event_count"].sum()),
                 "低信心點數": int(merged["low_confidence_event_count"].sum()),
                 "未配對打卡次數": int(merged["unmatched_event_count"].sum()),
@@ -4017,6 +4744,7 @@ def summarize_period(
     )
     summary["高風險打卡次數"] = summary["高風險點數"]
     summary["需覆核打卡次數"] = summary["需覆核點數"]
+    summary["異常打卡佔比"] = (summary["異常打卡點數"] / summary["總GPS點數"].clip(lower=1)).round(4)
     summary["平均綜合優先分"] = summary["平均風險優先分"]
     summary["平均異常風險分"] = (summary["異常風險分"] / summary["出勤天數"].clip(lower=1)).round(2)
 
@@ -4040,6 +4768,8 @@ def summarize_period(
             "review_score",
             "risk_rate",
             "review_event_count",
+            "abnormal_gps_event_count",
+            "abnormal_gps_event_rate",
             "high_risk_event_count",
             "low_confidence_event_count",
             "unmatched_event_count",
@@ -4086,6 +4816,8 @@ def summarize_period(
             "review_score": "開發/覆核分",
             "risk_rate": "風險率",
             "review_event_count": "需覆核打卡次數",
+            "abnormal_gps_event_count": "異常打卡點數",
+            "abnormal_gps_event_rate": "異常打卡佔比",
             "high_risk_event_count": "高風險打卡次數",
             "low_confidence_event_count": "低信心點數",
             "unmatched_event_count": "未配對打卡次數",
@@ -4138,6 +4870,8 @@ def build_overview_summary(
         "risk_priority_rate",
         "risk_rate",
         "review_event_count",
+        "abnormal_gps_event_count",
+        "abnormal_gps_event_rate",
         "high_risk_event_count",
         "low_confidence_event_count",
         "unmatched_event_count",
@@ -4187,6 +4921,8 @@ def build_overview_summary(
         "risk_priority_rate",
         "risk_rate",
         "review_event_count",
+        "abnormal_gps_event_count",
+        "abnormal_gps_event_rate",
         "high_risk_event_count",
         "low_confidence_event_count",
         "unmatched_event_count",
@@ -4210,6 +4946,7 @@ def build_overview_summary(
             總計預估公務里程=("estimated_business_km", lambda s: round(s.fillna(0).sum(), 2)),
             未打卡未處理次數=("missing_punch_unprocessed_count", lambda s: int(s.fillna(0).sum())),
             需覆核點數=("review_event_count", lambda s: int(s.fillna(0).sum())),
+            異常打卡點數=("abnormal_gps_event_count", lambda s: int(s.fillna(0).sum())),
             高風險點數=("high_risk_event_count", lambda s: int(s.fillna(0).sum())),
             低信心點數=("low_confidence_event_count", lambda s: int(s.fillna(0).sum())),
             未配對打卡次數=("unmatched_event_count", lambda s: int(s.fillna(0).sum())),
@@ -4240,6 +4977,7 @@ def build_overview_summary(
     summary["平均異常風險分"] = (summary["異常風險分"] / summary["出勤天數"].clip(lower=1)).round(2)
     summary["高風險打卡次數"] = summary["高風險點數"]
     summary["需覆核打卡次數"] = summary["需覆核點數"]
+    summary["異常打卡佔比"] = (summary["異常打卡點數"] / summary["總GPS點數"].clip(lower=1)).round(4)
     summary["平均風險率"] = (summary["風險分數"] / summary["總GPS點數"].clip(lower=1)).round(4)
     summary = summary.sort_values(["平均風險優先分", "風險優先分", "平均風險率"], ascending=[False, False, False])
     return summary
@@ -5155,6 +5893,53 @@ with tab_daily:
                 f"原因：{top_day_event.iloc[0].get('event_risk_focus', '未標示')}。"
             )
 
+    if not day_attendance.empty:
+        day_risk_metrics = day_risk_row.copy() if isinstance(day_risk_row, pd.DataFrame) else pd.DataFrame()
+        day_priority_score = (
+            pd.to_numeric(day_risk_metrics.get("risk_priority_score", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
+            if not day_risk_metrics.empty
+            else 0
+        )
+        day_raw_risk_score = (
+            pd.to_numeric(day_risk_metrics.get("risk_score", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
+            if not day_risk_metrics.empty
+            else 0
+        )
+        day_review_score = (
+            pd.to_numeric(day_risk_metrics.get("review_score", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
+            if not day_risk_metrics.empty
+            else 0
+        )
+        day_abnormal_count = (
+            pd.to_numeric(day_risk_metrics.get("abnormal_gps_event_count", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
+            if not day_risk_metrics.empty
+            else 0
+        )
+        day_gps_count = int(pd.to_numeric(day_attendance.get("gps_event_count", pd.Series(dtype=float)), errors="coerce").fillna(0).sum())
+        day_abnormal_rate = float(day_abnormal_count) / max(day_gps_count, 1)
+        day_unresolved_missing = 0
+        if not attendance_event_flags.empty:
+            day_flags = attendance_event_flags.loc[
+                attendance_event_flags["attendance_uid"].isin(day_attendance["attendance_uid"])
+            ].copy()
+            if not day_flags.empty and "missing_punch_unprocessed_count" in day_flags.columns:
+                day_unresolved_missing = int(pd.to_numeric(day_flags["missing_punch_unprocessed_count"], errors="coerce").fillna(0).sum())
+        render_audit_status_panel(
+            "當日稽核狀態",
+            f"{selected_employee_label} · {selected_date}",
+            rate_label="異常打卡佔比",
+            rate_value=day_abnormal_rate,
+            rate_numerator=int(day_abnormal_count),
+            rate_denominator=day_gps_count,
+            priority_score=day_priority_score,
+            metrics=[
+                ("綜合優先", day_priority_score, "float"),
+                ("異常風險", day_raw_risk_score, "float"),
+                ("開發/覆核", day_review_score, "float"),
+                ("未打卡待處理", day_unresolved_missing, "int"),
+            ],
+        )
+
     if not day_route.empty and not day_attendance.empty:
         summary_left, summary_mid, summary_right = st.columns(3)
         summary_extra, summary_more, summary_commute = st.columns(3)
@@ -5475,6 +6260,9 @@ with tab_weekly:
         int((card.get("risk_counts") or {}).get(LOW_CONFIDENCE_LABEL, 0)) for card in weekly_cards
     )
     weekly_priority_total = sum(float(card.get("risk_priority_score", 0) or 0) for card in weekly_cards)
+    weekly_gps_total = sum(int(card.get("gps_event_count", 0) or 0) for card in weekly_cards)
+    weekly_abnormal_gps_total = sum(int(card.get("abnormal_gps_event_count", 0) or 0) for card in weekly_cards)
+    weekly_abnormal_gps_rate = weekly_abnormal_gps_total / max(weekly_gps_total, 1)
     weekly_home_1000_total = sum(int((card.get("v3_categories") or {}).get("home_within_1000_count", 0)) for card in weekly_cards)
     weekly_home_only_days = sum(int((card.get("v3_categories") or {}).get("home_only_day", 0)) for card in weekly_cards)
     weekly_unknown_field_total = 0
@@ -5505,11 +6293,11 @@ with tab_weekly:
         "本週覆核摘要",
         [
             ("需覆核點數", weekly_review_total, "int"),
+            ("異常打卡佔比", weekly_abnormal_gps_rate, "percent"),
             ("高風險點數", weekly_high_total, "int"),
-            ("低信心點數", weekly_home_low_confidence_total, "int"),
             ("風險優先分", weekly_priority_total, "float"),
         ],
-        f"最可疑日期：{most_reviewed_text}",
+        f"最可疑日期：{most_reviewed_text}；異常打卡 {weekly_abnormal_gps_total} / GPS {weekly_gps_total} 點",
     )
     st.markdown(
         f"""
@@ -5540,6 +6328,7 @@ with tab_weekly:
                 "星期": card.get("label", ""),
                 "打卡點": card.get("event_count", 0),
                 "GPS點": card.get("gps_event_count", 0),
+                "異常打卡佔比": f"{float(card.get('abnormal_gps_event_rate', 0) or 0):.1%}",
                 "需覆核": card.get("review_count", 0),
                 "高風險": int(risk_counts.get(HIGH_RISK_LABEL, 0)),
                 "低信心": int(risk_counts.get(LOW_CONFIDENCE_LABEL, 0)),
@@ -5618,6 +6407,48 @@ with tab_period:
         period_month_text = "、".join(period_months)
         personal_month_order: list[str] = []
         employee_monthly_trend_for_pdf = pd.DataFrame()
+        period_risk_slice = daily_risk.loc[
+            (daily_risk["employee_id"] == period_employee_id)
+            & pd.to_datetime(daily_risk["work_date"], errors="coerce").dt.date.between(start_date, end_date)
+        ].copy()
+        period_priority_score = pd.to_numeric(
+            period_risk_slice.get("risk_priority_score", pd.Series(dtype=float)), errors="coerce"
+        ).fillna(0).sum()
+        period_raw_risk_score = pd.to_numeric(
+            period_risk_slice.get("risk_score", pd.Series(dtype=float)), errors="coerce"
+        ).fillna(0).sum()
+        period_review_score = pd.to_numeric(
+            period_risk_slice.get("review_score", pd.Series(dtype=float)), errors="coerce"
+        ).fillna(0).sum()
+        period_abnormal_count = pd.to_numeric(
+            period_risk_slice.get("abnormal_gps_event_count", pd.Series(dtype=float)), errors="coerce"
+        ).fillna(0).sum()
+        period_gps_count = int(pd.to_numeric(
+            period_risk_slice.get("gps_event_count", pd.Series(dtype=float)), errors="coerce"
+        ).fillna(0).sum())
+        period_abnormal_rate = float(period_abnormal_count) / max(period_gps_count, 1)
+        period_home_only_days = int(pd.to_numeric(
+            period_risk_slice.get("home_area_only_trace", pd.Series(dtype=float)), errors="coerce"
+        ).fillna(0).sum())
+        period_short_days = int(pd.to_numeric(
+            period_risk_slice.get("short_attendance_span", pd.Series(dtype=float)), errors="coerce"
+        ).fillna(0).sum())
+        render_audit_status_panel(
+            "個人期間稽核狀態",
+            f"{period_employee_label} · {start_date} ~ {end_date}",
+            rate_label="異常打卡佔比",
+            rate_value=period_abnormal_rate,
+            rate_numerator=int(period_abnormal_count),
+            rate_denominator=period_gps_count,
+            priority_score=period_priority_score,
+            metrics=[
+                ("綜合優先", period_priority_score, "float"),
+                ("異常風險", period_raw_risk_score, "float"),
+                ("開發/覆核", period_review_score, "float"),
+                ("僅居家天數", period_home_only_days, "int"),
+                ("工時過短天數", period_short_days, "int"),
+            ],
+        )
         st.markdown(
             (
                 '<div class="print-only period-print-header">'
@@ -5636,6 +6467,7 @@ with tab_period:
                 ("開發/覆核分", summary_row["開發/覆核分"], "float"),
                 ("異常風險分", summary_row["異常風險分"], "float"),
                 ("平均綜合優先分", summary_row["平均風險優先分"], "float"),
+                ("異常打卡佔比", summary_row["異常打卡佔比"], "percent"),
                 ("僅居家附近軌跡天數", summary_row["僅居家附近軌跡天數"], "int"),
                 ("未配對打卡次數", summary_row["未配對打卡次數"], "int"),
                 ("打卡不足天數", summary_row["打卡不足天數"], "int"),
@@ -5752,8 +6584,16 @@ with tab_period:
 
         st.markdown("**報表摘要**")
         summary_show = summary_df.rename(columns={"總匹配院所次數": "匹配院所總次數"})
-        render_print_table(summary_show)
-        st.dataframe(summary_show, width="stretch", hide_index=True)
+        summary_print = summary_show.copy()
+        if "異常打卡佔比" in summary_print.columns:
+            summary_print["異常打卡佔比"] = summary_print["異常打卡佔比"].apply(format_percent_text)
+        render_print_table(summary_print)
+        st.dataframe(
+            summary_show,
+            width="stretch",
+            hide_index=True,
+            column_config={"異常打卡佔比": st.column_config.NumberColumn(format="%.1%")},
+        )
 
         st.markdown("**月申請里程 vs 系統預估公務里程**")
         st.caption("以所選期間涵蓋到的月份整月比較，因此週報或自訂區間也會顯示對應月份的整月申請與整月預估。")
@@ -5867,8 +6707,11 @@ with tab_period:
         )
 
         st.markdown("**每日明細**")
+        detail_print = detail_df.copy()
+        if "異常打卡佔比" in detail_print.columns:
+            detail_print["異常打卡佔比"] = detail_print["異常打卡佔比"].apply(format_percent_text)
         render_print_table(
-            detail_df,
+            detail_print,
             [
                 "日期",
                 "打卡次數",
@@ -5879,6 +6722,8 @@ with tab_period:
                 "預估公務里程",
                 "覆核狀態",
                 "開發/覆核分",
+                "異常打卡點數",
+                "異常打卡佔比",
                 "未配對打卡次數",
                 "高風險打卡次數",
                 "綜合優先分",
@@ -5905,6 +6750,7 @@ with tab_period:
                 "總出勤分鐘": st.column_config.NumberColumn(format="%.1f"),
                 "有效外勤分鐘": st.column_config.NumberColumn(format="%.1f"),
                 "預估移動分鐘": st.column_config.NumberColumn(format="%.1f"),
+                "異常打卡佔比": st.column_config.NumberColumn(format="%.1%"),
                 "綜合優先分": st.column_config.NumberColumn(format="%.0f"),
                 "風險優先率": st.column_config.NumberColumn(format="%.2f"),
                 "異常風險分": st.column_config.NumberColumn(format="%.0f"),
@@ -6220,11 +7066,54 @@ with tab_overview:
             overview_claim_employee["比較燈號"] = "區間不判定"
         overview_claim_employee = overview_claim_employee.sort_values("差異率絕對值", ascending=False)
 
+    overview_risk_slice = daily_risk.loc[
+        pd.to_datetime(daily_risk["work_date"], errors="coerce").dt.date.between(overview_start_date, overview_end_date)
+    ].copy()
+    overview_priority_score = pd.to_numeric(
+        overview_risk_slice.get("risk_priority_score", pd.Series(dtype=float)), errors="coerce"
+    ).fillna(0).sum()
+    overview_raw_risk_score = pd.to_numeric(
+        overview_risk_slice.get("risk_score", pd.Series(dtype=float)), errors="coerce"
+    ).fillna(0).sum()
+    overview_review_score = pd.to_numeric(
+        overview_risk_slice.get("review_score", pd.Series(dtype=float)), errors="coerce"
+    ).fillna(0).sum()
+    overview_abnormal_count = pd.to_numeric(
+        overview_risk_slice.get("abnormal_gps_event_count", pd.Series(dtype=float)), errors="coerce"
+    ).fillna(0).sum()
+    overview_gps_count = int(pd.to_numeric(
+        overview_risk_slice.get("gps_event_count", pd.Series(dtype=float)), errors="coerce"
+    ).fillna(0).sum())
+    overview_abnormal_rate = float(overview_abnormal_count) / max(overview_gps_count, 1)
+    overview_home_only_days = int(pd.to_numeric(
+        overview_risk_slice.get("home_area_only_trace", pd.Series(dtype=float)), errors="coerce"
+    ).fillna(0).sum())
+    overview_short_days = int(pd.to_numeric(
+        overview_risk_slice.get("short_attendance_span", pd.Series(dtype=float)), errors="coerce"
+    ).fillna(0).sum())
+    render_audit_status_panel(
+        "全業務期間稽核狀態",
+        f"{overview_start_date} ~ {overview_end_date} · {len(overview_summary)} 位員工",
+        rate_label="異常打卡佔比",
+        rate_value=overview_abnormal_rate,
+        rate_numerator=int(overview_abnormal_count),
+        rate_denominator=overview_gps_count,
+        priority_score=overview_priority_score,
+        metrics=[
+            ("綜合優先", overview_priority_score, "float"),
+            ("異常風險", overview_raw_risk_score, "float"),
+            ("開發/覆核", overview_review_score, "float"),
+            ("僅居家天數", overview_home_only_days, "int"),
+            ("工時過短天數", overview_short_days, "int"),
+        ],
+    )
+
     render_risk_focus_band(
         "全業務覆核風險摘要",
         [
             ("平均綜合優先分", overview_summary["平均綜合優先分"].mean() if not overview_summary.empty else 0, "float"),
             ("平均異常風險分", overview_summary["平均異常風險分"].mean() if not overview_summary.empty else 0, "float"),
+            ("異常打卡佔比", overview_summary["異常打卡點數"].fillna(0).sum() / max(float(overview_summary["總GPS點數"].fillna(0).sum()), 1.0) if not overview_summary.empty else 0, "percent"),
             ("開發/覆核分", overview_summary["開發/覆核分"].fillna(0).sum() if not overview_summary.empty else 0, "float"),
             ("未配對打卡次數", overview_summary["未配對打卡次數"].fillna(0).sum() if not overview_summary.empty else 0, "int"),
             ("僅居家附近軌跡天數", overview_summary["僅居家附近軌跡天數"].fillna(0).sum() if not overview_summary.empty else 0, "int"),
@@ -6543,7 +7432,8 @@ with tab_overview:
     risk_top_row[2].metric("平均綜合優先分", f"{overview_summary['平均綜合優先分'].mean():.2f}" if not overview_summary.empty else "0.00")
     risk_top_row[3].metric("僅居家附近軌跡天數", int(overview_summary["僅居家附近軌跡天數"].fillna(0).sum()) if not overview_summary.empty else 0)
 
-    chart1 = st.container()
+    st.markdown("**核心風險圖表**")
+    chart1 = st.expander("出勤與路線輔助圖表：各業務總計預估里程比較", expanded=False)
     chart2 = st.container()
     with chart1:
         render_overview_chart_heading("各業務總計預估里程比較")
@@ -6602,8 +7492,8 @@ with tab_overview:
             fig_scatter.add_hline(y=avg_risk_score, line_width=1, line_dash="dash", line_color="#94a3b8")
             st.plotly_chart(fig_scatter, width="stretch")
 
-    chart3 = st.container()
-    chart4 = st.container()
+    chart3 = st.expander("出勤與路線輔助圖表：出勤時數與 GPS 點數比較", expanded=False)
+    chart4 = st.expander("財務輔助圖表：補貼總覽", expanded=False)
     with chart3:
         render_overview_chart_heading("出勤時數與 GPS 點數比較")
         if overview_summary.empty:
@@ -6660,6 +7550,7 @@ with tab_overview:
             )
             st.plotly_chart(fig_subsidy, width="stretch")
 
+    st.markdown("**風險來源與優先排名**")
     risk_chart1 = st.container()
     risk_chart2 = st.container()
     with risk_chart1:
@@ -6729,8 +7620,9 @@ with tab_overview:
             fig_risk_score.update_xaxes(range=[0, max(float(risk_score_max) * 1.12, 1.0)], automargin=True)
             st.plotly_chart(fig_risk_score, width="stretch")
 
-    claim_chart1 = st.container()
-    claim_chart2 = st.container()
+    st.markdown("**財務申報輔助分析**")
+    claim_chart1 = st.expander("月申請里程 vs 系統預估公務里程", expanded=False)
+    claim_chart2 = st.expander("申報差異排名", expanded=False)
     with claim_chart1:
         render_overview_chart_heading("員工月申請里程 vs 系統預估公務里程")
         if overview_claim_employee.empty:
@@ -6916,35 +7808,26 @@ with tab_overview:
             "department": "部門",
         }
     )
+    overview_summary_print_view = overview_summary_view.copy()
+    if "異常打卡佔比" in overview_summary_print_view.columns:
+        overview_summary_print_view["異常打卡佔比"] = overview_summary_print_view["異常打卡佔比"].apply(format_percent_text)
     render_print_table(
-        overview_summary_view,
+        overview_summary_print_view,
         [
             "員工編號",
             "員工",
             "部門",
             "出勤天數",
-            "總打卡次數",
             "總GPS點數",
-            "總計預估里程",
-            "總計預估公務里程",
-            "未打卡未處理次數",
+            "異常打卡點數",
+            "異常打卡佔比",
+            "綜合優先分",
+            "異常風險分",
             "開發/覆核分",
             "未配對打卡次數",
-            "高風險打卡次數",
-            "綜合優先分",
-            "平均綜合優先分",
-            "異常風險分",
-            "平均異常風險分",
-            "主要風險原因",
             "僅居家附近軌跡天數",
-            "打卡不足天數",
             "出勤時數過短天數",
-            "出勤時數過長天數",
-            "異常率",
-            "超時出勤率",
-            "油資補貼",
-            "維修補貼",
-            "日當費",
+            "主要風險原因",
         ],
     )
     route_table_tab, risk_table_tab, finance_table_tab = st.tabs(["出勤路線", "風險覆核", "財務申報"])
@@ -6985,6 +7868,8 @@ with tab_overview:
             "員工",
             "部門",
             "開發/覆核分",
+            "異常打卡點數",
+            "異常打卡佔比",
             "未配對打卡次數",
             "高風險打卡次數",
             "綜合優先分",
@@ -7005,6 +7890,8 @@ with tab_overview:
             hide_index=True,
             column_config={
                 "開發/覆核分": st.column_config.NumberColumn(format="%.0f"),
+                "異常打卡點數": st.column_config.NumberColumn(format="%d"),
+                "異常打卡佔比": st.column_config.NumberColumn(format="%.1%"),
                 "未配對打卡次數": st.column_config.NumberColumn(format="%d"),
                 "高風險打卡次數": st.column_config.NumberColumn(format="%d"),
                 "綜合優先分": st.column_config.NumberColumn(format="%.0f"),

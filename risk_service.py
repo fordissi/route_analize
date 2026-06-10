@@ -110,6 +110,8 @@ DAILY_RISK_COLUMNS = [
     "risk_priority_rate",
     "risk_rate",
     "review_event_count",
+    "abnormal_gps_event_count",
+    "abnormal_gps_event_rate",
     "high_risk_event_count",
     "low_confidence_event_count",
     "unmatched_event_count",
@@ -140,6 +142,8 @@ EMPLOYEE_RISK_COLUMNS = [
     "risk_rate",
     "review_rate",
     "review_event_count",
+    "abnormal_gps_event_count",
+    "abnormal_gps_event_rate",
     "high_risk_event_count",
     "low_confidence_event_count",
     "unmatched_event_count",
@@ -202,6 +206,7 @@ class RiskService:
         if "gps_event_count" not in result.columns:
             result["gps_event_count"] = 0
         result["gps_event_count"] = pd.to_numeric(result["gps_event_count"], errors="coerce").fillna(0)
+        result = self._attach_checkin_resolution_counts(result, raw_events)
         result = self._attach_attendance_rule_risk(result)
 
         risk = event_risk.copy()
@@ -214,6 +219,7 @@ class RiskService:
                     "confidence_score",
                     "risk_priority_score",
                     "review_event_count",
+                    "abnormal_gps_event_count",
                     "high_risk_event_count",
                     "low_confidence_event_count",
                     "unmatched_event_count",
@@ -242,6 +248,7 @@ class RiskService:
             risk["priority_score"] = pd.to_numeric(risk["priority_score"], errors="coerce").fillna(0)
             risk["confidence_score"] = pd.to_numeric(risk["confidence_score"], errors="coerce").fillna(0)
             risk["review_event"] = risk["risk_level"].isin(self._review_levels())
+            risk["abnormal_gps_event"] = risk["review_event"]
             risk["high_risk_event"] = risk["risk_level"].isin(self._high_risk_levels())
             risk["low_confidence_event"] = risk["risk_level"].eq(LOW_CONFIDENCE_LABEL)
             if "location_class" not in risk.columns:
@@ -255,6 +262,7 @@ class RiskService:
                     confidence_score=("confidence_score", "sum"),
                     risk_priority_score=("priority_score", "sum"),
                     review_event_count=("review_event", "sum"),
+                    abnormal_gps_event_count=("abnormal_gps_event", "sum"),
                     high_risk_event_count=("high_risk_event", "sum"),
                     low_confidence_event_count=("low_confidence_event", "sum"),
                     unmatched_event_count=("unmatched_event", "sum"),
@@ -270,12 +278,14 @@ class RiskService:
             "confidence_score",
             "risk_priority_score",
             "review_event_count",
+            "abnormal_gps_event_count",
             "high_risk_event_count",
             "low_confidence_event_count",
             "unmatched_event_count",
         ]:
             result[column] = pd.to_numeric(result[column], errors="coerce").fillna(0)
         result["review_event_count"] = result["review_event_count"].astype(int)
+        result["abnormal_gps_event_count"] = result["abnormal_gps_event_count"].astype(int)
         result["high_risk_event_count"] = result["high_risk_event_count"].astype(int)
         result["low_confidence_event_count"] = result["low_confidence_event_count"].astype(int)
         result["unmatched_event_count"] = result["unmatched_event_count"].astype(int)
@@ -315,6 +325,7 @@ class RiskService:
         result["risk_reason_summary"] = result.apply(self._merge_daily_reason_summary, axis=1)
         result["risk_priority_rate"] = result["risk_priority_score"] / result["gps_event_count"].clip(lower=1)
         result["risk_rate"] = result["risk_score"] / result["gps_event_count"].clip(lower=1)
+        result["abnormal_gps_event_rate"] = result["abnormal_gps_event_count"] / result["gps_event_count"].clip(lower=1)
         result["risk_level"] = result.apply(self._daily_level, axis=1)
         return result.reindex(columns=DAILY_RISK_COLUMNS)
 
@@ -330,6 +341,7 @@ class RiskService:
             "confidence_score",
             "risk_priority_score",
             "review_event_count",
+            "abnormal_gps_event_count",
             "high_risk_event_count",
             "low_confidence_event_count",
             "unmatched_event_count",
@@ -357,6 +369,7 @@ class RiskService:
                 confidence_score=("confidence_score", "sum"),
                 risk_priority_score=("risk_priority_score", "sum"),
                 review_event_count=("review_event_count", "sum"),
+                abnormal_gps_event_count=("abnormal_gps_event_count", "sum"),
                 high_risk_event_count=("high_risk_event_count", "sum"),
                 low_confidence_event_count=("low_confidence_event_count", "sum"),
                 unmatched_event_count=("unmatched_event_count", "sum"),
@@ -372,6 +385,7 @@ class RiskService:
         grouped["risk_rate"] = grouped["risk_score"] / grouped["gps_event_count"].clip(lower=1)
         grouped["risk_priority_rate"] = grouped["risk_priority_score"] / grouped["attendance_days"].clip(lower=1)
         grouped["review_rate"] = grouped["review_event_count"] / grouped["gps_event_count"].clip(lower=1)
+        grouped["abnormal_gps_event_rate"] = grouped["abnormal_gps_event_count"] / grouped["gps_event_count"].clip(lower=1)
         grouped["risk_level"] = grouped.apply(self._employee_level, axis=1)
         return grouped.reindex(columns=EMPLOYEE_RISK_COLUMNS).sort_values(
             ["risk_priority_rate", "risk_priority_score", "risk_rate"], ascending=[False, False, False]
@@ -381,9 +395,16 @@ class RiskService:
         result = attendance.copy()
         index = result.index
         event_count = (
-            pd.to_numeric(result["event_count"], errors="coerce")
+            pd.to_numeric(result["risk_checkin_count"], errors="coerce")
+            if "risk_checkin_count" in result.columns
+            else pd.to_numeric(result["event_count"], errors="coerce")
             if "event_count" in result.columns
             else pd.Series(pd.NA, index=index, dtype="Float64")
+        )
+        span_checkin_count = (
+            pd.to_numeric(result["actual_checkin_count"], errors="coerce")
+            if "actual_checkin_count" in result.columns
+            else event_count
         )
         first_actual = (
             pd.to_datetime(result["first_actual_time"], errors="coerce")
@@ -400,7 +421,7 @@ class RiskService:
         min_count = int(getattr(self.config, "risk_min_checkin_count", 2))
         min_span_minutes = float(getattr(self.config, "risk_min_attendance_span_hours", 6.0)) * 60
         max_span_minutes = float(getattr(self.config, "risk_max_attendance_span_hours", 14.0)) * 60
-        sufficient_count = event_count.ge(min_count).fillna(False)
+        sufficient_span_count = span_checkin_count.ge(min_count).fillna(False)
 
         result["attendance_span_minutes"] = span_minutes.where(valid_span, 0).fillna(0).round(0)
         missing_count = event_count.notna() & event_count.lt(min_count)
@@ -409,8 +430,52 @@ class RiskService:
         result["insufficient_checkin_count"] = missing_count.astype(int)
         result["insufficient_checkin_risk_score"] = (zero_count.astype(int) * 10) + (one_count.astype(int) * 5)
         result["insufficient_checkin_review_score"] = (zero_count.astype(int) * 10) + (one_count.astype(int) * 12)
-        result["short_attendance_span"] = (valid_span & sufficient_count & span_minutes.lt(min_span_minutes)).astype(int)
-        result["long_attendance_span"] = (valid_span & sufficient_count & span_minutes.gt(max_span_minutes)).astype(int)
+        result["short_attendance_span"] = (valid_span & sufficient_span_count & span_minutes.lt(min_span_minutes)).astype(int)
+        result["long_attendance_span"] = (valid_span & sufficient_span_count & span_minutes.gt(max_span_minutes)).astype(int)
+        return result
+
+    def _attach_checkin_resolution_counts(self, attendance: pd.DataFrame, raw_events: pd.DataFrame | None) -> pd.DataFrame:
+        result = attendance.copy()
+        fallback_count = (
+            pd.to_numeric(result["event_count"], errors="coerce").fillna(0)
+            if "event_count" in result.columns
+            else pd.to_numeric(result["gps_event_count"], errors="coerce").fillna(0)
+            if "gps_event_count" in result.columns
+            else pd.Series(0, index=result.index, dtype="float64")
+        )
+        if raw_events is None or raw_events.empty or "attendance_uid" not in raw_events.columns:
+            result["actual_checkin_count"] = fallback_count
+            result["processed_missing_punch_count"] = 0
+            result["unprocessed_missing_punch_count"] = 0
+            result["risk_checkin_count"] = fallback_count
+            return result
+
+        work = raw_events.copy()
+        for column in ["actual_time", "compare_result", "exception_action", "gps_lat", "gps_lon"]:
+            if column not in work.columns:
+                work[column] = pd.NA
+        compare_result = work["compare_result"].fillna("").astype(str).str.strip()
+        exception_action = work["exception_action"].fillna("").astype(str).str.strip()
+        actual_time = pd.to_datetime(work["actual_time"], errors="coerce")
+        has_gps = work["gps_lat"].notna() & work["gps_lon"].notna()
+        missing_punch = compare_result.str.contains("未打卡", regex=False, na=False)
+
+        work["actual_checkin"] = actual_time.notna() | has_gps
+        work["processed_missing_punch"] = missing_punch & exception_action.eq("已處理")
+        work["unprocessed_missing_punch"] = missing_punch & exception_action.eq("待處理")
+        grouped = (
+            work.groupby("attendance_uid", dropna=False)
+            .agg(
+                actual_checkin_count=("actual_checkin", "sum"),
+                processed_missing_punch_count=("processed_missing_punch", "sum"),
+                unprocessed_missing_punch_count=("unprocessed_missing_punch", "sum"),
+            )
+            .reset_index()
+        )
+        result = result.merge(grouped, on="attendance_uid", how="left")
+        for column in ["actual_checkin_count", "processed_missing_punch_count", "unprocessed_missing_punch_count"]:
+            result[column] = pd.to_numeric(result[column], errors="coerce").fillna(0)
+        result["risk_checkin_count"] = result["actual_checkin_count"] + result["processed_missing_punch_count"]
         return result
 
     def _build_home_trace_risk(

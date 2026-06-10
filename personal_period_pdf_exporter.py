@@ -68,6 +68,14 @@ def _format_percent(value: object) -> str:
     return f"{float(value):.2%}"
 
 
+def _format_percent_table_column(dataframe: pd.DataFrame, column: str) -> pd.DataFrame:
+    if dataframe.empty or column not in dataframe.columns:
+        return dataframe
+    result = dataframe.copy()
+    result[column] = result[column].apply(lambda value: "" if pd.isna(value) else f"{float(value):.1%}")
+    return result
+
+
 def _build_personal_figures(
     monthly_trend: pd.DataFrame,
     month_order: list[str] | None,
@@ -171,12 +179,19 @@ def build_personal_period_pdf_context(
             summary_df[target] = summary_df[source] if source in summary_df.columns else 0
     if "開發/覆核分" not in summary_df.columns:
         summary_df["開發/覆核分"] = 0
+    if "異常打卡點數" not in summary_df.columns:
+        summary_df["異常打卡點數"] = summary_df["需覆核點數"] if "需覆核點數" in summary_df.columns else 0
+    if "異常打卡佔比" not in summary_df.columns:
+        gps_values = summary_df["總GPS點數"] if "總GPS點數" in summary_df.columns else pd.Series(0, index=summary_df.index)
+        denominator = pd.to_numeric(gps_values, errors="coerce").fillna(0).clip(lower=1)
+        summary_df["異常打卡佔比"] = pd.to_numeric(summary_df["異常打卡點數"], errors="coerce").fillna(0) / denominator
     summary_row = _first_row(summary_df)
 
     risk_metrics = [
         _metric_from_row(summary_row, "開發/覆核分", "float"),
         _metric_from_row(summary_row, "異常風險分", "float"),
         _metric_from_row(summary_row, "平均綜合優先分", "float"),
+        _metric_from_row(summary_row, "異常打卡佔比", "percent"),
         _metric_from_row(summary_row, "僅居家附近軌跡天數", "int"),
         _metric_from_row(summary_row, "未配對打卡次數", "int"),
     ]
@@ -225,6 +240,8 @@ def build_personal_period_pdf_context(
             "總出勤時數",
             "總打卡次數",
             "總GPS點數",
+            "異常打卡點數",
+            "異常打卡佔比",
             "總計預估里程",
             "開發/覆核分",
             "未配對打卡次數",
@@ -234,6 +251,7 @@ def build_personal_period_pdf_context(
             "主要風險原因",
         ],
     )
+    summary_table = _format_percent_table_column(summary_table, "異常打卡佔比")
     claim_table = monthly_claims.rename(
         columns={
             "year_month": "月份",
@@ -269,14 +287,17 @@ def build_personal_period_pdf_context(
             "打卡次數",
             "GPS點數",
             "預估公務里程",
-            "需覆核點數",
-            "高風險點數",
+            "異常打卡點數",
+            "異常打卡佔比",
+            "需覆核打卡次數",
+            "高風險打卡次數",
             "風險優先分",
             "風險等級",
             "主要風險原因",
             "追查提示",
         ],
     )
+    detail_table = _format_percent_table_column(detail_table, "異常打卡佔比")
 
     return PersonalPeriodPdfContext(
         title="個人期間報表",

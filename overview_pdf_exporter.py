@@ -32,6 +32,12 @@ CHART_COLORS = [
     "#84cc16",
 ]
 
+PDF_PRIMARY_CHART_TITLES = {
+    "風險月趨勢：每出勤日風險優先分 / 需優先追查員工占比",
+    "員工風險來源拆解",
+    "綜合優先分排名",
+}
+
 
 @dataclass(frozen=True)
 class OverviewPdfContext:
@@ -114,6 +120,14 @@ def _format_metric(value: object, value_type: str = "float") -> str:
     if value_type == "km":
         return f"{float(value):.2f} km"
     return f"{float(value):.2f}"
+
+
+def _format_percent_table_column(dataframe: pd.DataFrame, column: str) -> pd.DataFrame:
+    if dataframe.empty or column not in dataframe.columns:
+        return dataframe
+    result = dataframe.copy()
+    result[column] = result[column].apply(lambda value: "" if pd.isna(value) else f"{float(value):.1%}")
+    return result
 
 
 def _ranking_rows(rows: pd.DataFrame, label_col: str, value_col: str, value_type: str) -> list[tuple[str, str]]:
@@ -412,16 +426,25 @@ def build_overview_pdf_context(
             overview_summary[target] = overview_summary[source] if source in overview_summary.columns else 0
     if "開發/覆核分" not in overview_summary.columns:
         overview_summary["開發/覆核分"] = 0
+    if "異常打卡點數" not in overview_summary.columns:
+        overview_summary["異常打卡點數"] = overview_summary["需覆核點數"] if "需覆核點數" in overview_summary.columns else 0
+    if "異常打卡佔比" not in overview_summary.columns:
+        gps_values = overview_summary["總GPS點數"] if "總GPS點數" in overview_summary.columns else pd.Series(0, index=overview_summary.index)
+        denominator = pd.to_numeric(gps_values, errors="coerce").fillna(0).clip(lower=1)
+        overview_summary["異常打卡佔比"] = pd.to_numeric(overview_summary["異常打卡點數"], errors="coerce").fillna(0) / denominator
+    gps_values = overview_summary["總GPS點數"] if "總GPS點數" in overview_summary.columns else pd.Series(0, index=overview_summary.index)
+    total_gps_points = float(pd.to_numeric(gps_values, errors="coerce").fillna(0).sum()) if not overview_summary.empty else 0.0
+    total_abnormal_points = float(pd.to_numeric(overview_summary.get("異常打卡點數", 0), errors="coerce").fillna(0).sum()) if not overview_summary.empty else 0.0
 
     metrics = [
         ("納入比較員工數", f"{len(overview_summary)}"),
-        ("全員總計預估里程", _format_metric(overview_summary["總計預估里程"].sum() if not overview_summary.empty else 0, "km")),
-        ("全員總計公務里程", _format_metric(overview_summary["總計預估公務里程"].sum() if not overview_summary.empty else 0, "km")),
-        ("開發/覆核分", _format_metric(overview_summary["開發/覆核分"].fillna(0).sum() if not overview_summary.empty else 0, "float")),
-        ("未配對打卡次數", _format_metric(overview_summary["未配對打卡次數"].fillna(0).sum() if not overview_summary.empty else 0, "int")),
-        ("平均異常率", _format_metric(overview_summary["異常率"].mean() if not overview_summary.empty else 0, "percent")),
-        ("平均超時率", _format_metric(overview_summary["超時出勤率"].mean() if not overview_summary.empty else 0, "percent")),
         ("平均綜合優先分", _format_metric(overview_summary["平均綜合優先分"].mean() if not overview_summary.empty else 0, "float")),
+        ("總異常風險分", _format_metric(overview_summary["異常風險分"].fillna(0).sum() if not overview_summary.empty else 0, "float")),
+        ("總開發/覆核分", _format_metric(overview_summary["開發/覆核分"].fillna(0).sum() if not overview_summary.empty else 0, "float")),
+        ("異常打卡佔比", _format_metric(total_abnormal_points / max(total_gps_points, 1.0), "percent")),
+        ("未配對打卡次數", _format_metric(overview_summary["未配對打卡次數"].fillna(0).sum() if not overview_summary.empty else 0, "int")),
+        ("僅居家天數", _format_metric(overview_summary["僅居家附近軌跡天數"].fillna(0).sum() if not overview_summary.empty else 0, "int")),
+        ("工時過短天數", _format_metric(overview_summary["出勤時數過短天數"].fillna(0).sum() if not overview_summary.empty else 0, "int")),
     ]
 
     priority_rank = overview_summary.sort_values(["綜合優先分", "平均綜合優先分"], ascending=[False, False]) if not overview_summary.empty else overview_summary
@@ -436,9 +459,14 @@ def build_overview_pdf_context(
         ("申報差異 Top 5", _ranking_rows(claim_diff_rank, "employee_label", "差異率絕對值", "percent")),
     ]
 
+    overview_figures = [
+        (title, fig, height)
+        for title, fig, height in _build_overview_figures(overview_summary, overview_claim_employee, company_monthly, month_order or [])
+        if title in PDF_PRIMARY_CHART_TITLES
+    ]
     charts = [
         (title, figure_to_png_data_uri(fig, image_renderer=image_renderer, width=1200, height=height, scale=1))
-        for title, fig, height in _build_overview_figures(overview_summary, overview_claim_employee, company_monthly, month_order or [])
+        for title, fig, height in overview_figures
     ]
 
     summary_columns = [
@@ -446,16 +474,15 @@ def build_overview_pdf_context(
         "employee_label",
         "department",
         "出勤天數",
-        "總出勤時數",
-        "總打卡次數",
         "總GPS點數",
-        "總計預估里程",
+        "異常打卡點數",
+        "異常打卡佔比",
+        "綜合優先分",
+        "異常風險分",
         "開發/覆核分",
         "未配對打卡次數",
-        "高風險打卡次數",
-        "平均綜合優先分",
-        "異常風險分",
         "僅居家附近軌跡天數",
+        "出勤時數過短天數",
         "主要風險原因",
     ]
     summary_table = overview_summary[[column for column in summary_columns if column in overview_summary.columns]].rename(
@@ -465,8 +492,10 @@ def build_overview_pdf_context(
             "department": "部門",
             "總出勤時數": "總時數",
             "僅居家附近軌跡天數": "僅居家天數",
+            "出勤時數過短天數": "工時過短天數",
         }
     )
+    summary_table = _format_percent_table_column(summary_table, "異常打卡佔比")
 
     return OverviewPdfContext(
         title="全業務日期區間總覽",

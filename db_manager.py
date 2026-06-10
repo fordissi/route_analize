@@ -159,6 +159,8 @@ CREATE TABLE IF NOT EXISTS daily_risk_summary (
     risk_priority_rate REAL,
     risk_rate REAL,
     review_event_count INTEGER,
+    abnormal_gps_event_count INTEGER,
+    abnormal_gps_event_rate REAL,
     high_risk_event_count INTEGER,
     low_confidence_event_count INTEGER,
     unmatched_event_count INTEGER,
@@ -189,6 +191,8 @@ CREATE TABLE IF NOT EXISTS employee_risk_summary (
     risk_rate REAL,
     review_rate REAL,
     review_event_count INTEGER,
+    abnormal_gps_event_count INTEGER,
+    abnormal_gps_event_rate REAL,
     high_risk_event_count INTEGER,
     low_confidence_event_count INTEGER,
     unmatched_event_count INTEGER,
@@ -331,6 +335,7 @@ class DatabaseManager:
 
     def replace_table(self, conn: sqlite3.Connection, table_name: str, dataframe) -> None:
         if table_name in SCHEMA_PRESERVED_TABLES:
+            self._migrate_risk_tables(conn)
             conn.execute(f"DELETE FROM {table_name}")
             dataframe.to_sql(table_name, conn, if_exists="append", index=False)
             return
@@ -341,6 +346,8 @@ class DatabaseManager:
 
     def _ensure_column(self, conn: sqlite3.Connection, table_name: str, column_name: str, column_sql: str) -> None:
         existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})")}
+        if not existing:
+            return
         if column_name not in existing:
             conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
 
@@ -403,6 +410,8 @@ class DatabaseManager:
             self._ensure_column(conn, table_name, "risk_priority_rate", "REAL")
             self._ensure_column(conn, table_name, "low_confidence_event_count", "INTEGER")
             self._ensure_column(conn, table_name, "unmatched_event_count", "INTEGER")
+            self._ensure_column(conn, table_name, "abnormal_gps_event_count", "INTEGER")
+            self._ensure_column(conn, table_name, "abnormal_gps_event_rate", "REAL")
         self._ensure_column(conn, "daily_risk_summary", "attendance_span_minutes", "REAL")
         self._ensure_column(conn, "daily_risk_summary", "insufficient_checkin_count", "INTEGER")
         self._ensure_column(conn, "daily_risk_summary", "short_attendance_span", "INTEGER")

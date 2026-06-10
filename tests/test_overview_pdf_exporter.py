@@ -78,6 +78,7 @@ def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
                 "高風險點數": 2,
                 "低信心點數": 1,
                 "僅居家附近軌跡天數": 1,
+                "出勤時數過短天數": 1,
                 "風險優先分": 30.0,
                 "綜合優先分": 30.0,
                 "異常風險分": 9.0,
@@ -146,23 +147,38 @@ def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
     )
 
     assert context.period_label == "2026-01-01 ~ 2026-01-31"
-    assert len(context.charts) >= 10
+    assert [title for title, _ in context.charts] == [
+        "風險月趨勢：每出勤日風險優先分 / 需優先追查員工占比",
+        "員工風險來源拆解",
+        "綜合優先分排名",
+    ]
     assert context.rankings[0][1][0] == ("HS01 李小明", "30.00")
     assert "員工" in context.summary_table.columns
-    assert "總時數" in context.summary_table.columns
+    assert list(context.summary_table.columns) == [
+        "員工編號",
+        "員工",
+        "部門",
+        "出勤天數",
+        "總GPS點數",
+        "異常打卡點數",
+        "異常打卡佔比",
+        "綜合優先分",
+        "異常風險分",
+        "開發/覆核分",
+        "未配對打卡次數",
+        "僅居家天數",
+        "工時過短天數",
+        "主要風險原因",
+    ]
     assert "僅居家天數" in context.summary_table.columns
-    assert context.summary_table.loc[0, "總時數"] == 8.5
     assert context.summary_table.loc[0, "僅居家天數"] == 1
 
     scatter_figures = [
         figure
         for figure in rendered_figures
-        if figure.layout.title.text in {"異常風險分 x 開發/覆核分象限", "月申請里程散點圖"}
+        if figure.layout.title.text == "異常風險分 x 開發/覆核分象限"
     ]
-    assert len(scatter_figures) == 2
-    for figure in scatter_figures:
-        assert any(trace.mode == "markers+text" for trace in figure.data)
-        assert any("HS01" in [str(text) for text in trace.text] for trace in figure.data if trace.text is not None)
+    assert scatter_figures == []
 
 
 def test_overview_pdf_context_limits_monthly_charts_to_recent_twelve_months():
@@ -210,7 +226,7 @@ def test_overview_pdf_context_limits_monthly_charts_to_recent_twelve_months():
         image_renderer=lambda figure, width, height, scale: (rendered_figures.append(figure) or b"\x89PNG\r\nfake"),
     )
 
-    assert len(rendered_figures) == 3
+    assert len(rendered_figures) == 1
     for figure in rendered_figures:
         assert list(figure.layout.xaxis.ticktext) == [
             "2025-07",

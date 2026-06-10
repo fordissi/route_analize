@@ -335,6 +335,152 @@ def test_insufficient_checkin_count_raises_daily_risk_priority() -> None:
     assert row["risk_level"] == HIGH_RISK_LABEL
 
 
+def test_processed_missing_punch_is_excluded_from_insufficient_checkin_risk() -> None:
+    event_risk = pd.DataFrame(columns=["event_uid", "attendance_uid", "risk_level", "risk_score", "risk_reason_codes"])
+    attendance = pd.DataFrame(
+        [
+            {
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "employee_name": "員工A",
+                "department": "業務",
+                "work_date": "2026-03-11",
+                "event_count": 2,
+                "gps_event_count": 0,
+                "first_actual_time": None,
+                "last_actual_time": None,
+            }
+        ]
+    )
+    raw_events = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "actual_time": None,
+                "gps_lat": None,
+                "gps_lon": None,
+                "compare_result": "未打卡",
+                "exception_action": "已處理",
+            },
+            {
+                "event_uid": "e2",
+                "attendance_uid": "a1",
+                "actual_time": None,
+                "gps_lat": None,
+                "gps_lon": None,
+                "compare_result": "未打卡",
+                "exception_action": "已處理",
+            },
+        ]
+    )
+
+    daily = RiskService(make_config()).build_daily_risk_summary(event_risk, attendance, raw_events=raw_events)
+    row = daily.iloc[0]
+
+    assert row["insufficient_checkin_count"] == 0
+    assert row["short_attendance_span"] == 0
+    assert row["risk_score"] == 0
+    assert row["review_score"] == 0
+
+
+def test_unprocessed_missing_punch_counts_as_insufficient_checkin_even_when_import_has_rows() -> None:
+    event_risk = pd.DataFrame(columns=["event_uid", "attendance_uid", "risk_level", "risk_score", "risk_reason_codes"])
+    attendance = pd.DataFrame(
+        [
+            {
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "employee_name": "員工A",
+                "department": "業務",
+                "work_date": "2026-03-09",
+                "event_count": 2,
+                "gps_event_count": 0,
+                "first_actual_time": None,
+                "last_actual_time": None,
+            }
+        ]
+    )
+    raw_events = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "actual_time": None,
+                "gps_lat": None,
+                "gps_lon": None,
+                "compare_result": "未打卡",
+                "exception_action": "待處理",
+            },
+            {
+                "event_uid": "e2",
+                "attendance_uid": "a1",
+                "actual_time": None,
+                "gps_lat": None,
+                "gps_lon": None,
+                "compare_result": "未打卡",
+                "exception_action": "待處理",
+            },
+        ]
+    )
+
+    daily = RiskService(make_config()).build_daily_risk_summary(event_risk, attendance, raw_events=raw_events)
+    row = daily.iloc[0]
+
+    assert row["insufficient_checkin_count"] == 1
+    assert row["risk_score"] == 10
+    assert row["review_score"] == 10
+    assert row["risk_level"] == HIGH_RISK_LABEL
+
+
+def test_processed_missing_punch_does_not_create_short_span_from_one_real_checkin() -> None:
+    event_risk = pd.DataFrame(columns=["event_uid", "attendance_uid", "risk_level", "risk_score", "risk_reason_codes"])
+    attendance = pd.DataFrame(
+        [
+            {
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "employee_name": "員工A",
+                "department": "業務",
+                "work_date": "2026-03-11",
+                "event_count": 2,
+                "gps_event_count": 1,
+                "first_actual_time": "2026-03-11 08:30:00",
+                "last_actual_time": "2026-03-11 08:30:00",
+            }
+        ]
+    )
+    raw_events = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "actual_time": "2026-03-11 08:30:00",
+                "gps_lat": 25.0,
+                "gps_lon": 121.0,
+                "compare_result": "正常",
+                "exception_action": "",
+            },
+            {
+                "event_uid": "e2",
+                "attendance_uid": "a1",
+                "actual_time": None,
+                "gps_lat": None,
+                "gps_lon": None,
+                "compare_result": "未打卡",
+                "exception_action": "已處理",
+            },
+        ]
+    )
+
+    daily = RiskService(make_config()).build_daily_risk_summary(event_risk, attendance, raw_events=raw_events)
+    row = daily.iloc[0]
+
+    assert row["insufficient_checkin_count"] == 0
+    assert row["short_attendance_span"] == 0
+    assert row["risk_score"] == 0
+
+
 def test_short_attendance_span_raises_daily_risk_priority() -> None:
     event_risk = pd.DataFrame(
         [
@@ -996,6 +1142,63 @@ def test_daily_summary_counts_unknown_field_as_unmatched_event() -> None:
 
     assert daily.iloc[0]["unmatched_event_count"] == 1
     assert employee.iloc[0]["unmatched_event_count"] == 1
+
+
+def test_abnormal_gps_event_rate_counts_only_event_level_review_points() -> None:
+    event_risk = pd.DataFrame(
+        [
+            {
+                "event_uid": "e1",
+                "attendance_uid": "a1",
+                "risk_level": "需覆核",
+                "risk_score": 0,
+                "review_score": 4,
+                "location_class": "unknown_field",
+                "risk_reason_codes": "unknown_field",
+            },
+            {
+                "event_uid": "e2",
+                "attendance_uid": "a1",
+                "risk_level": "正常",
+                "risk_score": 0,
+                "review_score": 0,
+                "location_class": "existing_client_visit",
+                "risk_reason_codes": "",
+            },
+            {
+                "event_uid": "e3",
+                "attendance_uid": "a1",
+                "risk_level": "低信心",
+                "risk_score": 0,
+                "review_score": 0,
+                "location_class": "existing_client_visit",
+                "risk_reason_codes": "nearby_candidate_conflict",
+            },
+        ]
+    )
+    attendance = pd.DataFrame(
+        [
+            {
+                "attendance_uid": "a1",
+                "employee_id": "A",
+                "employee_name": "User A",
+                "department": "Sales",
+                "work_date": "2026-05-08",
+                "gps_event_count": 4,
+                "event_count": 4,
+                "first_actual_time": "2026-05-08 09:00:00",
+                "last_actual_time": "2026-05-08 12:00:00",
+            }
+        ]
+    )
+
+    daily = RiskService(make_config()).build_daily_risk_summary(event_risk, attendance)
+    employee = RiskService(make_config()).build_employee_risk_summary(daily)
+
+    assert daily.iloc[0]["abnormal_gps_event_count"] == 1
+    assert daily.iloc[0]["abnormal_gps_event_rate"] == 0.25
+    assert employee.iloc[0]["abnormal_gps_event_count"] == 1
+    assert employee.iloc[0]["abnormal_gps_event_rate"] == 0.25
 
 
 def test_employee_summary_preserves_high_risk_daily_label() -> None:

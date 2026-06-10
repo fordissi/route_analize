@@ -32,12 +32,13 @@ CHART_COLORS = [
     "#84cc16",
 ]
 
-PDF_PRIMARY_CHART_TITLES = {
+PDF_PRIMARY_CHART_TITLES = [
     "風險月趨勢：每出勤日風險優先分 / 需優先追查員工占比",
     "員工風險來源拆解",
     "綜合優先分排名",
     "員工月申請里程 vs 系統預估公務里程",
-}
+    "異常風險分 x 開發/覆核分象限",
+]
 
 
 @dataclass(frozen=True)
@@ -340,7 +341,13 @@ def _build_overview_figures(
         charts.append(("綜合優先分排名", fig_risk_score, 500))
 
     if not overview_claim_employee.empty:
-        claim_bar_df = overview_claim_employee.melt(
+        claim_order = (
+            overview_claim_employee.sort_values("差異率絕對值", ascending=True)["employee_label"]
+            .dropna()
+            .drop_duplicates()
+            .tolist()
+        )
+        claim_bar_df = overview_claim_employee.sort_values("差異率絕對值", ascending=True).melt(
             id_vars=["employee_id", "employee_label", "department"],
             value_vars=["實際月申請里程", "系統預估月公務里程"],
             var_name="指標",
@@ -353,9 +360,11 @@ def _build_overview_figures(
             color="指標",
             barmode="group",
             orientation="h",
+            category_orders={"employee_label": claim_order},
             labels={"employee_label": "員工", "公里數": "公里數"},
         )
         _apply_static_chart_layout(fig_claim_bar, "員工月申請里程 vs 系統預估公務里程", height=520, margin=dict(l=170, r=180, t=58, b=68))
+        fig_claim_bar.update_yaxes(categoryorder="array", categoryarray=claim_order)
         fig_claim_bar.update_xaxes(range=_positive_range(claim_bar_df["公里數"]))
         charts.append(("員工月申請里程 vs 系統預估公務里程", fig_claim_bar, 520))
 
@@ -460,10 +469,14 @@ def build_overview_pdf_context(
         ("申報差異 Top 5", _ranking_rows(claim_diff_rank, "employee_label", "差異率絕對值", "percent")),
     ]
 
-    overview_figures = [
-        (title, fig, height)
+    built_figures = {
+        title: (fig, height)
         for title, fig, height in _build_overview_figures(overview_summary, overview_claim_employee, company_monthly, month_order or [])
-        if title in PDF_PRIMARY_CHART_TITLES
+    }
+    overview_figures = [
+        (title, *built_figures[title])
+        for title in PDF_PRIMARY_CHART_TITLES
+        if title in built_figures
     ]
     charts = [
         (title, figure_to_png_data_uri(fig, image_renderer=image_renderer, width=1200, height=height, scale=1))

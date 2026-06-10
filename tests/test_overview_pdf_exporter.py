@@ -93,6 +93,36 @@ def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
                 "日當費": 500.0,
                 "主要風險原因": "高風險打卡點",
                 "追查提示": "查看個人報表",
+            },
+            {
+                "employee_id": "HS02",
+                "employee_label": "HS02 王小華",
+                "department": "南區",
+                "出勤天數": 2,
+                "總打卡次數": 4,
+                "總GPS點數": 4,
+                "總出勤時數": 7.5,
+                "總計預估里程": 80.0,
+                "總計預估公務里程": 70.0,
+                "需覆核點數": 1,
+                "高風險點數": 0,
+                "低信心點數": 0,
+                "僅居家附近軌跡天數": 0,
+                "出勤時數過短天數": 0,
+                "風險優先分": 12.0,
+                "綜合優先分": 12.0,
+                "異常風險分": 2.0,
+                "開發/覆核分": 6.0,
+                "平均風險優先分": 6.0,
+                "平均綜合優先分": 6.0,
+                "平均風險率": 1.0,
+                "異常率": 0.0,
+                "超時出勤率": 0.0,
+                "油資補貼": 500.0,
+                "維修補貼": 0.0,
+                "日當費": 300.0,
+                "主要風險原因": "需覆核打卡點",
+                "追查提示": "查看個人報表",
             }
         ]
     )
@@ -108,6 +138,17 @@ def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
                 "差異率": -0.1,
                 "差異率絕對值": 0.1,
                 "比較燈號": "green",
+            },
+            {
+                "employee_id": "HS02",
+                "employee_label": "HS02 王小華",
+                "department": "南區",
+                "實際月申請里程": 180.0,
+                "系統預估月公務里程": 100.0,
+                "差異里程": 80.0,
+                "差異率": 0.44,
+                "差異率絕對值": 0.44,
+                "比較燈號": "red",
             }
         ]
     )
@@ -152,6 +193,7 @@ def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
         "員工風險來源拆解",
         "綜合優先分排名",
         "員工月申請里程 vs 系統預估公務里程",
+        "異常風險分 x 開發/覆核分象限",
     ]
     assert context.rankings[0][1][0] == ("HS01 李小明", "30.00")
     assert "員工" in context.summary_table.columns
@@ -179,7 +221,17 @@ def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
         for figure in rendered_figures
         if figure.layout.title.text == "異常風險分 x 開發/覆核分象限"
     ]
-    assert scatter_figures == []
+    assert len(scatter_figures) == 1
+    assert any(trace.mode == "markers+text" for trace in scatter_figures[0].data)
+    assert any("HS01" in [str(text) for text in trace.text] for trace in scatter_figures[0].data if trace.text is not None)
+
+    claim_figures = [
+        figure
+        for figure in rendered_figures
+        if figure.layout.title.text == "員工月申請里程 vs 系統預估公務里程"
+    ]
+    assert len(claim_figures) == 1
+    assert list(claim_figures[0].layout.yaxis.categoryarray) == ["HS01 李小明", "HS02 王小華"]
 
 
 def test_overview_pdf_context_limits_monthly_charts_to_recent_twelve_months():

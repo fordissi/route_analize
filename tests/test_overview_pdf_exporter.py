@@ -151,6 +151,7 @@ def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
         "風險月趨勢：每出勤日風險優先分 / 需優先追查員工占比",
         "員工風險來源拆解",
         "綜合優先分排名",
+        "員工月申請里程 vs 系統預估公務里程",
     ]
     assert context.rankings[0][1][0] == ("HS01 李小明", "30.00")
     assert "員工" in context.summary_table.columns

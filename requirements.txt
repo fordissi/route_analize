@@ -4,3 +4,4 @@ scipy>=1.16
 plotly>=6.5
 kaleido>=0.2.1
 streamlit>=1.44
+openpyxl>=3.1

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import html
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -702,6 +703,17 @@ def render_overview_html(context: OverviewPdfContext) -> str:
 </html>"""
 
 
+def _find_node_executable() -> str:
+    node_path = shutil.which("node")
+    if node_path:
+        return node_path
+    raise FileNotFoundError(
+        "PDF 匯出需要 Node.js，但 server 找不到 node.exe。"
+        "請在 server 安裝 Node.js LTS，或重新執行搬家包內的 setup_runtime.bat，"
+        "安裝後重開 run_app.bat / Streamlit 服務。"
+    )
+
+
 def _default_pdf_renderer(html_content: str) -> bytes:
     script_path = Path(__file__).with_name("tools") / "html_to_pdf.mjs"
     if not script_path.exists():
@@ -713,7 +725,7 @@ def _default_pdf_renderer(html_content: str) -> bytes:
         pdf_path = temp_path / "overview_report.pdf"
         html_path.write_text(html_content, encoding="utf-8")
         subprocess.run(
-            ["node", str(script_path), str(html_path), str(pdf_path)],
+            [_find_node_executable(), str(script_path), str(html_path), str(pdf_path)],
             check=True,
             cwd=Path(__file__).parent,
             capture_output=True,

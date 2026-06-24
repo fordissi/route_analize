@@ -2,9 +2,11 @@ import base64
 
 import pandas as pd
 import plotly.express as px
+import pytest
 
 from overview_pdf_exporter import (
     OverviewPdfContext,
+    _find_node_executable,
     build_overview_pdf_context,
     build_overview_pdf_bytes,
     figure_to_png_data_uri,
@@ -59,6 +61,13 @@ def test_build_overview_pdf_bytes_returns_renderer_output():
     pdf = build_overview_pdf_bytes(context, pdf_renderer=lambda html: b"%PDF-1.4\nfake")
 
     assert pdf.startswith(b"%PDF")
+
+
+def test_find_node_executable_reports_missing_node(monkeypatch):
+    monkeypatch.setattr("overview_pdf_exporter.shutil.which", lambda name: None)
+
+    with pytest.raises(FileNotFoundError, match="Node.js"):
+        _find_node_executable()
 
 
 def test_build_overview_pdf_context_builds_overview_charts_and_rankings():
